@@ -1,0 +1,16 @@
+:root { font-family: system-ui, Arial, sans-serif; }
+body { margin: 0; }
+.nav { display:flex; gap:16px; padding:12px; border-bottom:1px solid #ddd; }
+.page { padding:16px; }
+.grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
+.card { display:block; border:1px solid #ddd; padding:8px; text-decoration:none; color:inherit; border-radius:8px; }
+.card img { width:100%; height:140px; object-fit:cover; border-radius:6px; }
+.list { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+.item { border:1px solid #ddd; padding:10px; border-radius:8px; }
+.row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.title { font-weight:600; }
+.fav { background:none; border:none; font-size:20px; cursor:pointer; }
+textarea { width:100%; min-height:64px; margin-top:8px; }
+/* src/app.css – add */
+.meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.pill { border:1px solid #ddd; border-radius:999px; padding:2px 8px; font-size:12px; color:#333; }
