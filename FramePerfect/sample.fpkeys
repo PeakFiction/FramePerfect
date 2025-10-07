@@ -1,0 +1,13 @@
+{
+  "type": "frameperfect.keys",
+  "version": 1,
+  "createdAt": "2025-10-07T00:00:00.000Z",
+  "platform": "darwin",
+  "provider": "node-global-key-listener",
+  "durationMs": 12345,
+  "events": [
+    { "t": 0,     "label": "Ctrl+K" },
+    { "t": 125,   "label": "K" },
+    { "t": 6400,  "label": "Space" }
+  ]
+}

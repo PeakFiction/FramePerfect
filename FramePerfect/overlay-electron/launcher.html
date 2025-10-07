@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FramePerfect Overlay</title>
+  <style>
+    body { margin:0; font: 14px system-ui, -apple-system, Segoe UI, Arial; }
+    .wrap { padding: 20px; display:grid; gap:16px; }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    .row { display:flex; gap:12px; }
+    .btn { padding:10px 12px; border:1px solid #222; border-radius:10px; cursor:pointer; background:#111; color:#fff; }
+    .hint { font-size:12px; color:#555; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>FramePerfect Overlay</h1>
+    <div class="row">
+      <button class="btn" id="record">Record</button>
+      <button class="btn" id="import">Import &amp; Play</button>
+      <button class="btn" id="stop">Stop</button>
+    </div>
+    <div class="hint">
+      Shortcuts:
+      <span class="kbd">⌘/Ctrl+⇧+O</span> Toggle overlay ·
+      <span class="kbd">⌘/Ctrl+⇧+R</span> Start/Stop record ·
+      <span class="kbd">⌘/Ctrl+⇧+S</span> Save recording ·
+      <span class="kbd">⌘/Ctrl+⇧+I</span> Import ·
+      <span class="kbd">⌘/Ctrl+⇧+P</span> Play/Stop
+    </div>
+  </div>
+  <script>
+    document.getElementById('record').onclick = () => window.api.recordStart();
+    document.getElementById('import').onclick = () => window.api.importChooseAndPlay();
+    document.getElementById('stop').onclick   = () => window.api.playbackStop();
+  </script>
+</body>
+</html>
