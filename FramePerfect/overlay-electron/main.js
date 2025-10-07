@@ -1,13 +1,14 @@
+// overlay-electron/main.js
 const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process'); // Windows SendKeys injector
+const { spawn } = require('child_process');
 
 let overlayWin = null;
 let launcherWin = null;
 let mode = 'idle';
 let providerName = 'unknown';
-let injectEnabled = true;  // UI + Ctrl+Shift+J toggles
+let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
@@ -16,6 +17,59 @@ let recEvents = [];
 // playback
 let playbackTimers = [];
 let playbackEndTimer = null;
+
+// ---------------- ViGEm pad server (FpPad.exe) ----------------
+let padProc = null;
+let padStdin = null;
+
+function startPadServer() {
+  if (process.platform !== 'win32') return;
+  const exe = path.join(__dirname, 'tools', 'win', 'FpPad', 'bin', 'Release', 'net8.0', 'FpPad.exe');
+  if (!fs.existsSync(exe)) {
+    setStatus({ ok: false, error: `FpPad missing: ${exe}` });
+    return;
+  }
+  if (padProc && !padProc.killed) return;
+  padProc = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
+  padStdin = padProc.stdin;
+  padProc.on('exit', (code) => {
+    padProc = null;
+    padStdin = null;
+    setStatus({ ok: false, error: `FpPad exited ${code}` });
+  });
+}
+
+function padSend(line) {
+  if (!injectEnabled || process.platform !== 'win32') return;
+  if (!padStdin) startPadServer();
+  if (!padStdin) return;
+  try { padStdin.write(line + '\n'); } catch {}
+}
+
+function injectChord(labels, holdMs = 55) {
+  // normalize labels to FpPad keys; ',' becomes COMMA
+  const ks = labels.map(l => (l === ',' ? 'COMMA' : l)).join(',');
+  padSend(`chord ${ks} ${holdMs}`);
+}
+// --------------------------------------------------------------
+
+// group events that occur within a small window so “df+1” presses together
+function groupEventsForChords(events, windowMs = 35) {
+  const out = [];
+  let i = 0;
+  while (i < events.length) {
+    const t0 = events[i].t;
+    const labels = [events[i].label];
+    let j = i + 1;
+    while (j < events.length && (events[j].t - t0) <= windowMs) {
+      labels.push(events[j].label);
+      j++;
+    }
+    out.push({ t: t0, labels });
+    i = j;
+  }
+  return out;
+}
 
 function ensureOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
@@ -61,50 +115,29 @@ function stopPlayback() {
   setStatus({ ok: true, message: 'Playback stopped' });
 }
 
-// ---------- Windows injection (no npm deps) ----------
-function mapLabelToSendKeys(label) {
-  if (!label || label.startsWith('Keycode:')) return '';
-  const tokens = label.split('+').map(s => s.trim());
-  const last = tokens.pop();
-  const modChar = t => ({Ctrl:'^',Control:'^',Shift:'+',
-                         Alt:'%',Option:'%',Cmd:'^',Meta:'^',Windows:'^'})[t] || '';
-  const prefix = tokens.map(modChar).join('');
-  const keyMap = {
-    Space:' ', Enter:'{ENTER}', Tab:'{TAB}', Esc:'{ESC}', Escape:'{ESC}', Backspace:'{BACKSPACE}',
-    Left:'{LEFT}', Right:'{RIGHT}', Up:'{UP}', Down:'{DOWN}',
-    F1:'{F1}',F2:'{F2}',F3:'{F3}',F4:'{F4}',F5:'{F5}',F6:'{F6}',
-    F7:'{F7}',F8:'{F8}',F9:'{F9}',F10:'{F10}',F11:'{F11}',F12:'{F12}',
-  };
-  const main = keyMap[last] || last; // A..Z, 0..9 pass through
-  return prefix + main;
-}
-function sendKeysPS(seq) {
-  if (!seq) return;
-  const escaped = seq.replace(/`/g,'``').replace(/"/g,'`"').replace(/\\/g,'`\\');
-  const cmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${escaped}")`;
-  spawn('powershell.exe', ['-NoLogo','-NoProfile','-Command', cmd], { windowsHide: true });
-}
-function injectLabel(label) {
-  if (!injectEnabled) return;
-  if (process.platform !== 'win32') return;
-  const seq = mapLabelToSendKeys(label);
-  if (seq) sendKeysPS(seq);
-}
-// ----------------------------------------------------
-
 function startPlaybackFrom(events, durationMs) {
   clearPlayback();
   mode = 'playback';
   const start = Date.now();
   const w = ensureOverlay();
 
+  // HUD pills
   for (const ev of events) {
     const id = setTimeout(() => {
       w.webContents.send('key', { label: ev.label, playback: true, at: Date.now() - start });
-      if (mode === 'playback') injectLabel(ev.label);
     }, Math.max(0, ev.t));
     playbackTimers.push(id);
   }
+
+  // Controller injection with chord grouping
+  const chords = groupEventsForChords(events, 35);       // “df+1” window
+  for (const ch of chords) {
+    const id = setTimeout(() => {
+      if (mode === 'playback') injectChord(ch.labels, 55); // hold ~55ms
+    }, Math.max(0, ch.t));
+    playbackTimers.push(id);
+  }
+
   playbackEndTimer = setTimeout(() => { stopPlayback(); }, Math.max(0, durationMs));
   setStatus({ ok: true, message: 'Playback' });
 }
@@ -164,7 +197,6 @@ async function chooseAndPlay(filePathArg) {
   startPlaybackFrom(json.events, duration);
 }
 
-
 function wireKeys() {
   let addListener = null, stop = null;
 
@@ -186,7 +218,6 @@ function wireKeys() {
   }
 
   if (!addListener) { setStatus({ ok: false, error: 'No global key provider' }); return; }
-
   setStatus({ ok: true, message: 'Ready' });
 
   addListener((e) => {
@@ -201,7 +232,6 @@ function wireKeys() {
       (e.keycode && `Keycode:${e.keycode}`) ||
       'Key';
     const label = [...mods, name].join('+');
-
     ensureOverlay().webContents.send('key', { label });
     if (mode === 'recording') recEvents.push({ t: Date.now() - recStartTs, label });
   });
@@ -210,30 +240,12 @@ function wireKeys() {
 }
 
 function wireIPC() {
-  ipcMain.on('record:start', () => {
-    stopPlayback();
-    startRecording();
-    ensureOverlay().show();
-  });
-
-  ipcMain.on('record:stopAndSave', () => {
-    stopRecordingAndSave();
-  });
-
-  ipcMain.on('import:chooseAndPlay', () => {
-    chooseAndPlay();
-  });
-
-  ipcMain.on('playback:stop', () => {
-    stopPlayback();
-  });
-
-  ipcMain.on('inject:set', (_e, v) => {
-    injectEnabled = !!v;
-    setStatus({ ok: true, message: `Inject ${injectEnabled ? 'ON' : 'OFF'}` });
-  });
+  ipcMain.on('record:start',        () => { stopPlayback(); startRecording(); ensureOverlay().show(); });
+  ipcMain.on('record:stopAndSave',  () => { stopRecordingAndSave(); });
+  ipcMain.on('import:chooseAndPlay',() => { chooseAndPlay(); });
+  ipcMain.on('playback:stop',       () => { stopPlayback(); });
+  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` }); });
 }
-
 
 function wireShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+O', () => {
@@ -245,9 +257,7 @@ function wireShortcuts() {
   });
   globalShortcut.register('CommandOrControl+Shift+S', () => { stopRecordingAndSave(); });
   globalShortcut.register('CommandOrControl+Shift+I', () => { chooseAndPlay(); });
-  globalShortcut.register('CommandOrControl+Shift+P', () => {
-    if (mode === 'playback') stopPlayback(); else chooseAndPlay();
-  });
+  globalShortcut.register('CommandOrControl+Shift+P', () => { if (mode === 'playback') stopPlayback(); else chooseAndPlay(); });
   globalShortcut.register('CommandOrControl+Shift+J', () => {
     injectEnabled = !injectEnabled;
     setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` });
@@ -257,6 +267,7 @@ function wireShortcuts() {
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
+  startPadServer();        // start ViGEm controller server
   wireKeys();
   wireIPC();
   wireShortcuts();
