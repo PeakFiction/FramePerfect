@@ -1,17 +1,19 @@
 const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process'); // Windows SendKeys injector
 
-let overlayWin = null;   // transparent HUD
-let launcherWin = null;  // control window
+let overlayWin = null;
+let launcherWin = null;
 let mode = 'idle';
 let providerName = 'unknown';
+let injectEnabled = true;  // UI + Ctrl+Shift+J toggles
 
-// recording state
+// recording
 let recStartTs = 0;
 let recEvents = [];
 
-// playback state
+// playback
 let playbackTimers = [];
 let playbackEndTimer = null;
 
@@ -59,6 +61,37 @@ function stopPlayback() {
   setStatus({ ok: true, message: 'Playback stopped' });
 }
 
+// ---------- Windows injection (no npm deps) ----------
+function mapLabelToSendKeys(label) {
+  if (!label || label.startsWith('Keycode:')) return '';
+  const tokens = label.split('+').map(s => s.trim());
+  const last = tokens.pop();
+  const modChar = t => ({Ctrl:'^',Control:'^',Shift:'+',
+                         Alt:'%',Option:'%',Cmd:'^',Meta:'^',Windows:'^'})[t] || '';
+  const prefix = tokens.map(modChar).join('');
+  const keyMap = {
+    Space:' ', Enter:'{ENTER}', Tab:'{TAB}', Esc:'{ESC}', Escape:'{ESC}', Backspace:'{BACKSPACE}',
+    Left:'{LEFT}', Right:'{RIGHT}', Up:'{UP}', Down:'{DOWN}',
+    F1:'{F1}',F2:'{F2}',F3:'{F3}',F4:'{F4}',F5:'{F5}',F6:'{F6}',
+    F7:'{F7}',F8:'{F8}',F9:'{F9}',F10:'{F10}',F11:'{F11}',F12:'{F12}',
+  };
+  const main = keyMap[last] || last; // A..Z, 0..9 pass through
+  return prefix + main;
+}
+function sendKeysPS(seq) {
+  if (!seq) return;
+  const escaped = seq.replace(/`/g,'``').replace(/"/g,'`"').replace(/\\/g,'`\\');
+  const cmd = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${escaped}")`;
+  spawn('powershell.exe', ['-NoLogo','-NoProfile','-Command', cmd], { windowsHide: true });
+}
+function injectLabel(label) {
+  if (!injectEnabled) return;
+  if (process.platform !== 'win32') return;
+  const seq = mapLabelToSendKeys(label);
+  if (seq) sendKeysPS(seq);
+}
+// ----------------------------------------------------
+
 function startPlaybackFrom(events, durationMs) {
   clearPlayback();
   mode = 'playback';
@@ -68,6 +101,7 @@ function startPlaybackFrom(events, durationMs) {
   for (const ev of events) {
     const id = setTimeout(() => {
       w.webContents.send('key', { label: ev.label, playback: true, at: Date.now() - start });
+      if (mode === 'playback') injectLabel(ev.label);
     }, Math.max(0, ev.t));
     playbackTimers.push(id);
   }
@@ -130,6 +164,7 @@ async function chooseAndPlay(filePathArg) {
   startPlaybackFrom(json.events, duration);
 }
 
+
 function wireKeys() {
   let addListener = null, stop = null;
 
@@ -158,8 +193,8 @@ function wireKeys() {
     const mods = [];
     if (e.ctrlKey)  mods.push('Ctrl');
     if (e.shiftKey) mods.push('Shift');
-    if (e.altKey)   mods.push(process.platform === 'darwin' ? 'Option' : 'Alt');
-    if (e.metaKey)  mods.push('Cmd');
+    if (e.altKey)   mods.push('Alt');
+    if (e.metaKey)  mods.push('Windows');
     const name =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
@@ -175,11 +210,30 @@ function wireKeys() {
 }
 
 function wireIPC() {
-  ipcMain.on('record:start', () => { stopPlayback(); startRecording(); ensureOverlay().show(); });
-  ipcMain.on('record:stopAndSave', () => { stopRecordingAndSave(); });
-  ipcMain.on('import:chooseAndPlay', () => { chooseAndPlay(); });
-  ipcMain.on('playback:stop', () => { stopPlayback(); });
+  ipcMain.on('record:start', () => {
+    stopPlayback();
+    startRecording();
+    ensureOverlay().show();
+  });
+
+  ipcMain.on('record:stopAndSave', () => {
+    stopRecordingAndSave();
+  });
+
+  ipcMain.on('import:chooseAndPlay', () => {
+    chooseAndPlay();
+  });
+
+  ipcMain.on('playback:stop', () => {
+    stopPlayback();
+  });
+
+  ipcMain.on('inject:set', (_e, v) => {
+    injectEnabled = !!v;
+    setStatus({ ok: true, message: `Inject ${injectEnabled ? 'ON' : 'OFF'}` });
+  });
 }
+
 
 function wireShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+O', () => {
@@ -192,8 +246,11 @@ function wireShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+S', () => { stopRecordingAndSave(); });
   globalShortcut.register('CommandOrControl+Shift+I', () => { chooseAndPlay(); });
   globalShortcut.register('CommandOrControl+Shift+P', () => {
-    if (mode === 'playback') stopPlayback();
-    else chooseAndPlay();
+    if (mode === 'playback') stopPlayback(); else chooseAndPlay();
+  });
+  globalShortcut.register('CommandOrControl+Shift+J', () => {
+    injectEnabled = !injectEnabled;
+    setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` });
   });
 }
 

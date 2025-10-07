@@ -15,10 +15,7 @@ window.api.onStatus((p) => {
   statusEl.textContent = p.ok ? `[${p.provider}] ${p.message || ''}`.trim()
                               : `Error: ${p.error || p.message}`;
   modeEl.textContent = p.mode ? `• ${p.mode}` : '';
-  if (recDot) {
-    if (p.mode === 'recording') recDot.classList.add('rec');
-    else recDot.classList.remove('rec');
-  }
+  if (p.mode === 'recording') recDot.classList.add('rec'); else recDot.classList.remove('rec');
 });
 
 window.api.onKey(({ label }) => { push(label); });
