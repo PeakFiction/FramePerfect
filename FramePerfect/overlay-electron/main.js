@@ -12,7 +12,7 @@ let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
-let recEvents = [];
+let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]  v1: [{t,label}]
 
 // playback
 let playbackTimers = [];
@@ -33,8 +33,7 @@ function startPadServer() {
   padProc = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
   padStdin = padProc.stdin;
   padProc.on('exit', (code) => {
-    padProc = null;
-    padStdin = null;
+    padProc = null; padStdin = null;
     setStatus({ ok: false, error: `FpPad exited ${code}` });
   });
 }
@@ -45,30 +44,24 @@ function padSend(line) {
   if (!padStdin) return;
   try { padStdin.write(line + '\n'); } catch {}
 }
-
-function injectChord(labels, holdMs = 55) {
-  // normalize labels to FpPad keys; ',' becomes COMMA
-  const ks = labels.map(l => (l === ',' ? 'COMMA' : l)).join(',');
-  padSend(`chord ${ks} ${holdMs}`);
-}
 // --------------------------------------------------------------
 
-// group events that occur within a small window so “df+1” presses together
-function groupEventsForChords(events, windowMs = 35) {
-  const out = [];
-  let i = 0;
-  while (i < events.length) {
-    const t0 = events[i].t;
-    const labels = [events[i].label];
-    let j = i + 1;
-    while (j < events.length && (events[j].t - t0) <= windowMs) {
-      labels.push(events[j].label);
-      j++;
-    }
-    out.push({ t: t0, labels });
-    i = j;
-  }
-  return out;
+// ---------- helpers ----------
+function setStatus(obj) {
+  const w = ensureOverlay();
+  w.webContents.send('status', { ...obj, mode, provider: providerName });
+}
+
+function clearPlayback() {
+  playbackTimers.forEach(clearTimeout);
+  playbackTimers = [];
+  if (playbackEndTimer) { clearTimeout(playbackEndTimer); playbackEndTimer = null; }
+}
+
+function stopPlayback() {
+  clearPlayback();
+  mode = 'idle';
+  setStatus({ ok: true, message: 'Playback stopped' });
 }
 
 function ensureOverlay() {
@@ -98,43 +91,68 @@ function ensureLauncher() {
   return launcherWin;
 }
 
-function setStatus(obj) {
-  const w = ensureOverlay();
-  w.webContents.send('status', { ...obj, mode, provider: providerName });
+// Map raw labels from the hook to our pad keys (only those we care about)
+function mapToPadKey(label) {
+  if (!label) return null;
+  const s = String(label).toUpperCase();
+  if (s === ',') return 'COMMA';
+  const allowed = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
+  return allowed.has(s) ? s : null;
 }
 
-function clearPlayback() {
-  playbackTimers.forEach(clearTimeout);
-  playbackTimers = [];
-  if (playbackEndTimer) { clearTimeout(playbackEndTimer); playbackEndTimer = null; }
+// Group v1 single-key events in a tiny window to make chords; then synthesize holds
+function groupEventsForChords(events, windowMs = 35) {
+  // events: [{t,label}]
+  const out = [];
+  let i = 0;
+  while (i < events.length) {
+    const t0 = events[i].t;
+    const labels = [events[i].label];
+    let j = i + 1;
+    while (j < events.length && (events[j].t - t0) <= windowMs) {
+      labels.push(events[j].label);
+      j++;
+    }
+    out.push({ t: t0, labels });
+    i = j;
+  }
+  return out;
 }
 
-function stopPlayback() {
-  clearPlayback();
-  mode = 'idle';
-  setStatus({ ok: true, message: 'Playback stopped' });
+// Upgrade v1 -> v2 timeline with synthetic holds
+function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
+  const chords = groupEventsForChords(v1events, windowMs);
+  const v2 = [];
+  for (const ch of chords) {
+    const keys = ch.labels.map(mapToPadKey).filter(Boolean);
+    if (keys.length === 0) continue;
+    // press all at t
+    for (const k of keys) v2.push({ t: ch.t, type: 'down', key: k });
+    // release all at t+hold
+    for (const k of keys) v2.push({ t: ch.t + holdMs, type: 'up', key: k });
+  }
+  v2.sort((a,b)=>a.t-b.t);
+  const duration = v2.length ? v2[v2.length-1].t + 30 : 0;
+  return { events: v2, durationMs: duration };
 }
 
-function startPlaybackFrom(events, durationMs) {
+// ---------- playback ----------
+function startPlaybackFromV2(v2events, durationMs) {
   clearPlayback();
   mode = 'playback';
   const start = Date.now();
   const w = ensureOverlay();
 
-  // HUD pills
-  for (const ev of events) {
+  for (const ev of v2events) {
     const id = setTimeout(() => {
-      w.webContents.send('key', { label: ev.label, playback: true, at: Date.now() - start });
+      if (ev.type === 'down') {
+        // HUD pill on downs
+        w.webContents.send('key', { label: ev.key, playback: true, at: Date.now() - start });
+        padSend(`down ${ev.key}`);
+      } else if (ev.type === 'up') {
+        padSend(`up ${ev.key}`);
+      }
     }, Math.max(0, ev.t));
-    playbackTimers.push(id);
-  }
-
-  // Controller injection with chord grouping
-  const chords = groupEventsForChords(events, 35);       // “df+1” window
-  for (const ch of chords) {
-    const id = setTimeout(() => {
-      if (mode === 'playback') injectChord(ch.labels, 55); // hold ~55ms
-    }, Math.max(0, ch.t));
     playbackTimers.push(id);
   }
 
@@ -142,6 +160,7 @@ function startPlaybackFrom(events, durationMs) {
   setStatus({ ok: true, message: 'Playback' });
 }
 
+// ---------- record ----------
 function startRecording() {
   mode = 'recording';
   recStartTs = Date.now();
@@ -154,7 +173,7 @@ async function stopRecordingAndSave() {
   const durationMs = Date.now() - recStartTs;
   const payload = {
     type: 'frameperfect.keys',
-    version: 1,
+    version: 2, // v2: down/up events with keys
     createdAt: new Date().toISOString(),
     platform: process.platform,
     provider: providerName,
@@ -171,6 +190,7 @@ async function stopRecordingAndSave() {
   setStatus({ ok: true, message: 'Recording saved' });
 }
 
+// ---------- import ----------
 async function chooseAndPlay(filePathArg) {
   let fileToOpen = filePathArg;
   if (!fileToOpen) {
@@ -188,15 +208,33 @@ async function chooseAndPlay(filePathArg) {
   }
   const text = fs.readFileSync(fileToOpen, 'utf-8');
   const json = JSON.parse(text);
-  if (json?.type !== 'frameperfect.keys' || !Array.isArray(json.events)) {
+
+  if (json?.type !== 'frameperfect.keys') {
     setStatus({ ok: false, error: 'Invalid .fpkeys file' });
     return;
   }
+
+  // Accept v2 directly, upgrade v1 automatically
+  let v2events, duration;
+  if (json.version >= 2 && Array.isArray(json.events) && json.events[0]?.type) {
+    v2events = json.events
+      .map(ev => ({ t: ev.t|0, type: ev.type, key: mapToPadKey(ev.key || ev.label) }))
+      .filter(ev => ev.key && (ev.type === 'down' || ev.type === 'up'))
+      .sort((a,b)=>a.t-b.t);
+    duration = json.durationMs ?? (v2events.length ? v2events[v2events.length-1].t + 30 : 0);
+  } else {
+    // v1: array of {t,label}
+    const v1events = (json.events || []).map(e => ({ t: e.t|0, label: e.label }));
+    const upgraded = upgradeV1ToV2(v1events);
+    v2events = upgraded.events;
+    duration = json.durationMs ?? upgraded.durationMs;
+  }
+
   ensureOverlay().show();
-  const duration = json.durationMs ?? (json.events.at(-1)?.t ?? 0);
-  startPlaybackFrom(json.events, duration);
+  startPlaybackFromV2(v2events, duration);
 }
 
+// ---------- key hook ----------
 function wireKeys() {
   let addListener = null, stop = null;
 
@@ -204,13 +242,13 @@ function wireKeys() {
     const { GlobalKeyboardListener } = require('node-global-key-listener');
     const gkl = new GlobalKeyboardListener();
     providerName = 'node-global-key-listener';
-    addListener = (fn) => gkl.addListener((e) => { if (e.state === 'DOWN') fn(e); });
+    addListener = (fn) => gkl.addListener((e) => fn(e));
     stop = () => gkl.removeAllListeners();
   } catch {
     try {
       const iohook = require('iohook');
       providerName = 'iohook';
-      addListener = (fn) => { iohook.on('keydown', fn); iohook.start(); };
+      addListener = (fn) => { iohook.on('keydown', e => fn({ ...e, state: 'DOWN' })); iohook.on('keyup', e => fn({ ...e, state: 'UP' })); iohook.start(); };
       stop = () => { try { iohook.stop(); } catch {} };
     } catch {
       providerName = 'none';
@@ -221,24 +259,31 @@ function wireKeys() {
   setStatus({ ok: true, message: 'Ready' });
 
   addListener((e) => {
-    const mods = [];
-    if (e.ctrlKey)  mods.push('Ctrl');
-    if (e.shiftKey) mods.push('Shift');
-    if (e.altKey)   mods.push('Alt');
-    if (e.metaKey)  mods.push('Windows');
-    const name =
+    // normalize name
+    const rawName =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
+      (typeof e.keychar === 'string' && e.keychar) ||
       (e.keycode && `Keycode:${e.keycode}`) ||
-      'Key';
-    const label = [...mods, name].join('+');
-    ensureOverlay().webContents.send('key', { label });
-    if (mode === 'recording') recEvents.push({ t: Date.now() - recStartTs, label });
+      '';
+    // show HUD only on DOWN
+    if (e.state === 'DOWN') {
+      const hudLabel = String(rawName);
+      ensureOverlay().webContents.send('key', { label: hudLabel });
+    }
+    if (mode === 'recording') {
+      const k = mapToPadKey(String(rawName));
+      if (!k) return; // record only mapped keys for the pad
+      const type = (e.state === 'DOWN') ? 'down' : (e.state === 'UP' ? 'up' : null);
+      if (!type) return;
+      recEvents.push({ t: Date.now() - recStartTs, type, key: k });
+    }
   });
 
   app.on('will-quit', () => { try { stop && stop(); } catch {} });
 }
 
+// ---------- ipc & shortcuts ----------
 function wireIPC() {
   ipcMain.on('record:start',        () => { stopPlayback(); startRecording(); ensureOverlay().show(); });
   ipcMain.on('record:stopAndSave',  () => { stopRecordingAndSave(); });
@@ -264,10 +309,11 @@ function wireShortcuts() {
   });
 }
 
+// ---------- boot ----------
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
-  startPadServer();        // start ViGEm controller server
+  startPadServer();
   wireKeys();
   wireIPC();
   wireShortcuts();
