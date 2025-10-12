@@ -6,13 +6,14 @@ const { spawn } = require('child_process');
 
 let overlayWin = null;
 let launcherWin = null;
+let gpWin = null; // gamepad bridge window
 let mode = 'idle';
 let providerName = 'unknown';
 let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
-let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]  v1: [{t,label}]
+let recEvents = []; // v2: [{ t, type:'down'|'up', key:'W'|'A'|'U'|'I'|'J'|'K', ... }]
 
 // playback
 let playbackTimers = [];
@@ -45,6 +46,24 @@ function padSend(line) {
   try { padStdin.write(line + '\n'); } catch {}
 }
 // --------------------------------------------------------------
+
+// ---------------- Gamepad bridge window ----------------
+function ensureGamepadBridge() {
+  if (gpWin && !gpWin.isDestroyed()) return gpWin;
+  gpWin = new BrowserWindow({
+    show: false,            // keep it hidden
+    width: 300, height: 80,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-gamepad.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false, // keep timers running while hidden
+    }
+  });
+  gpWin.loadFile(path.join(__dirname, 'gamepad-bridge.html'));
+  return gpWin;
+}
+// -------------------------------------------------------
 
 // ---------- helpers ----------
 function setStatus(obj) {
@@ -83,7 +102,7 @@ function ensureOverlay() {
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
   launcherWin = new BrowserWindow({
-    width: 640, height: 360, title: 'FramePerfect Overlay',
+    width: 640, height: 360, title: 'FramePerfect Overlay', // wider so buttons never clip
     resizable: false, frame: true, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
@@ -91,19 +110,17 @@ function ensureLauncher() {
   return launcherWin;
 }
 
-// Map raw labels from the hook to our pad keys (only those we care about)
-// ▼▼▼ ここを U/I/J/K に置換（WASD は継続） ▼▼▼
+// Map raw labels from the keyboard hook to the pad keys we care about.
+// We now allow U/I/J/K (buttons) and WASD (directions).
 function mapToPadKey(label) {
   if (!label) return null;
   const s = String(label).toUpperCase();
   const allowed = new Set(['W','A','S','D','U','I','J','K','B','V']);
   return allowed.has(s) ? s : null;
 }
-// ▲▲▲ ここまで変更点 ▲▲▲
 
-// Group v1 single-key events in a tiny window to make chords; then synthesize holds
+// Group v1 single-key events (not used by v2 pipeline here, but kept for compatibility)
 function groupEventsForChords(events, windowMs = 35) {
-  // events: [{t,label}]
   const out = [];
   let i = 0;
   while (i < events.length) {
@@ -120,16 +137,13 @@ function groupEventsForChords(events, windowMs = 35) {
   return out;
 }
 
-// Upgrade v1 -> v2 timeline with synthetic holds
 function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
   const chords = groupEventsForChords(v1events, windowMs);
   const v2 = [];
   for (const ch of chords) {
     const keys = ch.labels.map(mapToPadKey).filter(Boolean);
     if (keys.length === 0) continue;
-    // press all at t
     for (const k of keys) v2.push({ t: ch.t, type: 'down', key: k });
-    // release all at t+hold
     for (const k of keys) v2.push({ t: ch.t + holdMs, type: 'up', key: k });
   }
   v2.sort((a,b)=>a.t-b.t);
@@ -147,7 +161,6 @@ function startPlaybackFromV2(v2events, durationMs) {
   for (const ev of v2events) {
     const id = setTimeout(() => {
       if (ev.type === 'down') {
-        // HUD pill on downs
         w.webContents.send('key', { label: ev.key, playback: true, at: Date.now() - start });
         padSend(`down ${ev.key}`);
       } else if (ev.type === 'up') {
@@ -174,7 +187,7 @@ async function stopRecordingAndSave() {
   const durationMs = Date.now() - recStartTs;
   const payload = {
     type: 'frameperfect.keys',
-    version: 2, // v2: down/up events with keys
+    version: 2,
     createdAt: new Date().toISOString(),
     platform: process.platform,
     provider: providerName,
@@ -215,7 +228,6 @@ async function chooseAndPlay(filePathArg) {
     return;
   }
 
-  // Accept v2 directly, upgrade v1 automatically
   let v2events, duration;
   if (json.version >= 2 && Array.isArray(json.events) && json.events[0]?.type) {
     v2events = json.events
@@ -224,7 +236,6 @@ async function chooseAndPlay(filePathArg) {
       .sort((a,b)=>a.t-b.t);
     duration = json.durationMs ?? (v2events.length ? v2events[v2events.length-1].t + 30 : 0);
   } else {
-    // v1: array of {t,label}
     const v1events = (json.events || []).map(e => ({ t: e.t|0, label: e.label }));
     const upgraded = upgradeV1ToV2(v1events);
     v2events = upgraded.events;
@@ -235,7 +246,7 @@ async function chooseAndPlay(filePathArg) {
   startPlaybackFromV2(v2events, duration);
 }
 
-// ---------- key hook ----------
+// ---------- keyboard hook ----------
 function wireKeys() {
   let addListener = null, stop = null;
 
@@ -260,21 +271,18 @@ function wireKeys() {
   setStatus({ ok: true, message: 'Ready' });
 
   addListener((e) => {
-    // normalize name
     const rawName =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
       (typeof e.keychar === 'string' && e.keychar) ||
       (e.keycode && `Keycode:${e.keycode}`) ||
       '';
-    // show HUD only on DOWN
     if (e.state === 'DOWN') {
-      const hudLabel = String(rawName);
-      ensureOverlay().webContents.send('key', { label: hudLabel });
+      ensureOverlay().webContents.send('key', { label: String(rawName) });
     }
     if (mode === 'recording') {
       const k = mapToPadKey(String(rawName));
-      if (!k) return; // record only mapped keys for the pad
+      if (!k) return;
       const type = (e.state === 'DOWN') ? 'down' : (e.state === 'UP' ? 'up' : null);
       if (!type) return;
       recEvents.push({ t: Date.now() - recStartTs, type, key: k });
@@ -284,13 +292,49 @@ function wireKeys() {
   app.on('will-quit', () => { try { stop && stop(); } catch {} });
 }
 
-// ---------- ipc & shortcuts ----------
+// ---------- gamepad -> app mapping & IPC ----------
+function gamepadButtonIndexToKey(index) {
+  // Face buttons (standard layout / XInput):
+  // 0:A, 1:B, 2:X, 3:Y
+  if (index === 2) return 'U'; // X -> button 1
+  if (index === 3) return 'I'; // Y -> button 2
+  if (index === 0) return 'J'; // A -> button 3
+  if (index === 1) return 'K'; // B -> button 4
+  // D-Pad:
+  if (index === 12) return 'W'; // Up
+  if (index === 13) return 'S'; // Down
+  if (index === 14) return 'A'; // Left
+  if (index === 15) return 'D'; // Right
+  return null;
+}
+
+ipcMain.on('gp:event', (_e, payload) => {
+  if (!payload || payload.kind !== 'button') return;
+  const key = gamepadButtonIndexToKey(payload.index);
+  if (!key) return;
+
+  // HUD on press
+  if (payload.pressed) {
+    ensureOverlay().webContents.send('key', { label: key });
+  }
+
+  // Record while in recording mode
+  if (mode === 'recording') {
+    recEvents.push({
+      t: Date.now() - recStartTs,
+      type: payload.pressed ? 'down' : 'up',
+      key
+    });
+  }
+});
+
+// ---------- IPC & shortcuts ----------
 function wireIPC() {
   ipcMain.on('record:start',        () => { stopPlayback(); startRecording(); ensureOverlay().show(); });
   ipcMain.on('record:stopAndSave',  () => { stopRecordingAndSave(); });
   ipcMain.on('import:chooseAndPlay',() => { chooseAndPlay(); });
   ipcMain.on('playback:stop',       () => { stopPlayback(); });
-  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` }); });
+  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled ? 'ON' : 'OFF'}` }); });
 }
 
 function wireShortcuts() {
@@ -306,7 +350,7 @@ function wireShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+P', () => { if (mode === 'playback') stopPlayback(); else chooseAndPlay(); });
   globalShortcut.register('CommandOrControl+Shift+J', () => {
     injectEnabled = !injectEnabled;
-    setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` });
+    setStatus({ ok:true, message:`Inject ${injectEnabled ? 'ON' : 'OFF'}` });
   });
 }
 
@@ -314,6 +358,7 @@ function wireShortcuts() {
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
+  ensureGamepadBridge();  // start hidden gamepad bridge
   startPadServer();
   wireKeys();
   wireIPC();
