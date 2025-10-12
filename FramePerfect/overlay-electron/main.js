@@ -83,7 +83,7 @@ function ensureOverlay() {
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
   launcherWin = new BrowserWindow({
-    width: 420, height: 280, title: 'FramePerfect Overlay',
+    width: 640, height: 360, title: 'FramePerfect Overlay',
     resizable: false, frame: true, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
@@ -92,13 +92,14 @@ function ensureLauncher() {
 }
 
 // Map raw labels from the hook to our pad keys (only those we care about)
+// ▼▼▼ ここを U/I/J/K に置換（WASD は継続） ▼▼▼
 function mapToPadKey(label) {
   if (!label) return null;
   const s = String(label).toUpperCase();
-  if (s === ',') return 'COMMA';
-  const allowed = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
+  const allowed = new Set(['W','A','S','D','U','I','J','K','B','V']);
   return allowed.has(s) ? s : null;
 }
+// ▲▲▲ ここまで変更点 ▲▲▲
 
 // Group v1 single-key events in a tiny window to make chords; then synthesize holds
 function groupEventsForChords(events, windowMs = 35) {

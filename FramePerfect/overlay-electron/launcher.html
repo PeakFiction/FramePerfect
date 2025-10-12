@@ -1,38 +1,149 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   <title>FramePerfect Overlay</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { margin:0; font:14px system-ui,-apple-system,Segoe UI,Arial; }
-    .wrap { padding:20px; display:grid; gap:16px; }
-    .row { display:flex; gap:12px; align-items:center; }
-    .btn { padding:10px 12px; border:1px solid #222; border-radius:10px; cursor:pointer; background:#111; color:#fff; }
-    .hint { font-size:12px; color:#555; }
-    .kbd { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    /* === Color system with light/dark support === */
+    :root {
+      --bg: #0b0c10;
+      --panel: #121318;
+      --text: #ffffff;
+      --muted: #9aa0a6;
+
+      --btn-bg: #1f2430;
+      --btn-text: #ffffff;
+      --btn-border: #3a3f4b;
+      --btn-hover: #2a3040;
+      --btn-active: #181c26;
+
+      --primary-bg: #3b82f6;  /* Record */
+      --primary-border: #2563eb;
+      --primary-hover: #2f74ee;
+
+      --danger-bg: #ef4444;   /* Stop */
+      --danger-border: #dc2626;
+      --danger-hover: #e23a3a;
+
+      --focus: #8b5cf6;       /* focus ring */
+      --shadow: 0 10px 30px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+      --inner: inset 0 1px 0 rgba(255,255,255,.06);
+      --radius: 16px;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root{
+        --bg:#f5f7fb; --panel:#ffffff; --text:#0e1116; --muted:#4c5564;
+        --btn-bg:#f2f4f7; --btn-text:#0e1116; --btn-border:#d1d7e0;
+        --btn-hover:#e9eef5; --btn-active:#e2e8f0;
+        --primary-bg:#2563eb; --primary-border:#1d4ed8; --primary-hover:#1f54d8;
+        --danger-bg:#dc2626; --danger-border:#b91c1c; --danger-hover:#c71f1f;
+        --focus:#7c3aed; --shadow:0 10px 30px rgba(2,6,23,.08),0 2px 8px rgba(2,6,23,.06);
+        --inner: inset 0 1px 0 rgba(255,255,255,.9);
+      }
+    }
+
+    /* === Layout === */
+    html,body{height:100%}
+    body{
+      margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:var(--text); background:var(--bg);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .panel{
+      width:min(680px, 92vw);
+      background:var(--panel);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      padding:28px 28px 22px;
+    }
+
+    .title{
+      font-weight:800; font-size:20px; letter-spacing:.3px; margin:2px 0 16px;
+      text-shadow:0 1px 0 rgba(0,0,0,.25);
+    }
+
+    .row{display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:8px 0 14px}
+    .spacer{height:6px}
+
+    /* === Buttons === */
+    .btn{
+      appearance:none; border-radius:var(--radius);
+      padding:12px 16px; border:1px solid var(--btn-border);
+      background:var(--btn-bg); color:var(--btn-text); font-weight:700;
+      box-shadow:var(--shadow), var(--inner);
+      transition:transform .06s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease, filter .18s ease;
+      cursor:pointer; user-select:none;
+    }
+    .btn:hover{ background:var(--btn-hover); transform:translateY(-1px); }
+    .btn:active{ background:var(--btn-active); transform:translateY(0); }
+    .btn:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+
+    .btn--primary{
+      background:var(--primary-bg); border-color:var(--primary-border);
+      color:#fff; text-shadow:0 1px 0 rgba(0,0,0,.25);
+    }
+    .btn--primary:hover{ background:var(--primary-hover); filter:saturate(1.05); }
+
+    .btn--danger{
+      background:var(--danger-bg); border-color:var(--danger-border);
+      color:#fff; text-shadow:0 1px 0 rgba(0,0,0,.25);
+    }
+    .btn--danger:hover{ background:var(--danger-hover); }
+
+    /* === Controls === */
+    .check{
+      display:flex; gap:10px; align-items:center;
+      padding:10px 12px; border-radius:12px;
+      background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    }
+    .hint{ color:var(--muted); font-size:12px; margin-top:10px }
+    .kbd{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:rgba(255,255,255,.08); padding:1px 6px; border-radius:8px; }
+
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="panel">
+    <div class="title">FramePerfect Overlay</div>
+
     <div class="row">
-      <button class="btn" id="record">Record</button>
-      <button class="btn" id="save">Save Recording</button>
-      <button class="btn" id="import">Import &amp; Play</button>
-      <button class="btn" id="stop">Stop Playback</button>
+      <button id="record" class="btn btn--primary">Record</button>
+      <button id="save"   class="btn">Save Recording</button>
+      <button id="import" class="btn">Import &amp; Play</button>
     </div>
+
     <div class="row">
-      <label><input id="inject" type="checkbox" checked> Inject to virtual controller</label>
+      <button id="stop"   class="btn btn--danger">Stop Playback</button>
     </div>
+
+    <div class="row check">
+      <input id="inject" type="checkbox" checked aria-label="Inject to virtual controller" />
+      <label for="inject">Inject to virtual controller</label>
+    </div>
+
     <div class="hint">
-      Ctrl+Shift+O toggle overlay · Ctrl+Shift+R start/stop record · Ctrl+Shift+S save · Ctrl+Shift+I import · Ctrl+Shift+P play/stop · Ctrl+Shift+J toggle inject
+      Buttons show Tekken notation:
+      <span class="kbd">U/I/J/K → 1/2/3/4</span>,
+      <span class="kbd">W/A/S/D → u/b/d/f</span> ·
+      Toggle overlay <span class="kbd">Ctrl+Shift+O</span> ·
+      Start/Stop record <span class="kbd">Ctrl+Shift+R</span> ·
+      Save <span class="kbd">Ctrl+Shift+S</span> ·
+      Import <span class="kbd">Ctrl+Shift+I</span> ·
+      Play/Stop <span class="kbd">Ctrl+Shift+P</span> ·
+      Toggle inject <span class="kbd">Ctrl+Shift+J</span>
     </div>
   </div>
+
   <script>
-    record.onclick = () => window.api.recordStart();
-    save.onclick   = () => window.api.recordStopAndSave();
-    import.onclick = () => window.api.importChooseAndPlay();
-    stop.onclick   = () => window.api.playbackStop();
-    inject.onchange = (e) => window.api.injectSet(e.target.checked);
+    // wired exactly like前回の修正
+    const $ = (id) => document.getElementById(id);
+    $('record')?.addEventListener('click', () => window.api.recordStart());
+    $('save')?.addEventListener('click',   () => window.api.recordStopAndSave());
+    $('import')?.addEventListener('click', () => window.api.importChooseAndPlay());
+    $('stop')?.addEventListener('click',   () => window.api.playbackStop());
+    $('inject')?.addEventListener('change', (e) => window.api.injectSet(!!e.target.checked));
   </script>
 </body>
 </html>
