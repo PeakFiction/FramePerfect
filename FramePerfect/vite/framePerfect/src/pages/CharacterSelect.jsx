@@ -15,7 +15,7 @@ export default function CharacterSelect() {
           const name = c.name || c.characterName || `Char ${id}`;
           const slug = c.slug || slugify(name);
           return (
-            <Link key={id} to={`/combo?char=${encodeURIComponent(name)}`} className="card">
+            <Link key={id} to={`/moves?char=${encodeURIComponent(name)}`} className="card">
               <img src={`/assets/${slug}.webp`} alt={name} onError={(e)=>{e.currentTarget.style.display='none';}}/>
               <div>{name}</div>
             </Link>
