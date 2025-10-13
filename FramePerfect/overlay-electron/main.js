@@ -6,14 +6,14 @@ const { spawn } = require('child_process');
 
 let overlayWin = null;
 let launcherWin = null;
-let gpWin = null; // gamepad bridge window
+let gpWin = null; // hidden gamepad bridge
 let mode = 'idle';
 let providerName = 'unknown';
 let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
-let recEvents = []; // v2: [{ t, type:'down'|'up', key:'W'|'A'|'U'|'I'|'J'|'K', ... }]
+let recEvents = []; // v2: [{ t, type:'down'|'up', key:'W'|'A'|'S'|'D'|'U'|'I'|'J'|'K' }]
 
 // playback
 let playbackTimers = [];
@@ -39,6 +39,23 @@ function startPadServer() {
   });
 }
 
+// Translate internal keys -> FpPad/XInput tokens
+// Internal keys: U,I,J,K,W,A,S,D
+// XInput tokens (common): A,B,X,Y,DUP,DDOWN,DLEFT,DRIGHT
+function injectTokenForKey(k) {
+  switch (String(k).toUpperCase()) {
+    case 'U': return 'X';       // X button
+    case 'I': return 'Y';       // Y button
+    case 'J': return 'A';       // A button
+    case 'K': return 'B';       // B button
+    case 'W': return 'DUP';
+    case 'S': return 'DDOWN';
+    case 'A': return 'DLEFT';
+    case 'D': return 'DRIGHT';
+    default:  return null;
+  }
+}
+
 function padSend(line) {
   if (!injectEnabled || process.platform !== 'win32') return;
   if (!padStdin) startPadServer();
@@ -51,13 +68,13 @@ function padSend(line) {
 function ensureGamepadBridge() {
   if (gpWin && !gpWin.isDestroyed()) return gpWin;
   gpWin = new BrowserWindow({
-    show: false,            // keep it hidden
+    show: false,
     width: 300, height: 80,
     webPreferences: {
       preload: path.join(__dirname, 'preload-gamepad.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false, // keep timers running while hidden
+      backgroundThrottling: false,
     }
   });
   gpWin.loadFile(path.join(__dirname, 'gamepad-bridge.html'));
@@ -102,7 +119,7 @@ function ensureOverlay() {
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
   launcherWin = new BrowserWindow({
-    width: 640, height: 360, title: 'FramePerfect Overlay', // wider so buttons never clip
+    width: 640, height: 360, title: 'FramePerfect Overlay',
     resizable: false, frame: true, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
@@ -110,8 +127,7 @@ function ensureLauncher() {
   return launcherWin;
 }
 
-// Map raw labels from the keyboard hook to the pad keys we care about.
-// We now allow U/I/J/K (buttons) and WASD (directions).
+// Map raw keyboard labels to our internal keys
 function mapToPadKey(label) {
   if (!label) return null;
   const s = String(label).toUpperCase();
@@ -119,7 +135,7 @@ function mapToPadKey(label) {
   return allowed.has(s) ? s : null;
 }
 
-// Group v1 single-key events (not used by v2 pipeline here, but kept for compatibility)
+// v1 -> v2 helpers (kept for compatibility)
 function groupEventsForChords(events, windowMs = 35) {
   const out = [];
   let i = 0;
@@ -160,11 +176,15 @@ function startPlaybackFromV2(v2events, durationMs) {
 
   for (const ev of v2events) {
     const id = setTimeout(() => {
+      // HUD pill only on press
       if (ev.type === 'down') {
         w.webContents.send('key', { label: ev.key, playback: true, at: Date.now() - start });
-        padSend(`down ${ev.key}`);
-      } else if (ev.type === 'up') {
-        padSend(`up ${ev.key}`);
+      }
+      // Inject to virtual pad (Windows only)
+      const tok = injectTokenForKey(ev.key);
+      if (tok) {
+        if (ev.type === 'down') padSend(`down ${tok}`);
+        else if (ev.type === 'up') padSend(`up ${tok}`);
       }
     }, Math.max(0, ev.t));
     playbackTimers.push(id);
@@ -260,7 +280,11 @@ function wireKeys() {
     try {
       const iohook = require('iohook');
       providerName = 'iohook';
-      addListener = (fn) => { iohook.on('keydown', e => fn({ ...e, state: 'DOWN' })); iohook.on('keyup', e => fn({ ...e, state: 'UP' })); iohook.start(); };
+      addListener = (fn) => {
+        iohook.on('keydown', e => fn({ ...e, state: 'DOWN' }));
+        iohook.on('keyup',   e => fn({ ...e, state: 'UP' }));
+        iohook.start();
+      };
       stop = () => { try { iohook.stop(); } catch {} };
     } catch {
       providerName = 'none';
@@ -294,17 +318,16 @@ function wireKeys() {
 
 // ---------- gamepad -> app mapping & IPC ----------
 function gamepadButtonIndexToKey(index) {
-  // Face buttons (standard layout / XInput):
-  // 0:A, 1:B, 2:X, 3:Y
-  if (index === 2) return 'U'; // X -> button 1
-  if (index === 3) return 'I'; // Y -> button 2
-  if (index === 0) return 'J'; // A -> button 3
-  if (index === 1) return 'K'; // B -> button 4
-  // D-Pad:
-  if (index === 12) return 'W'; // Up
-  if (index === 13) return 'S'; // Down
-  if (index === 14) return 'A'; // Left
-  if (index === 15) return 'D'; // Right
+  // Standard mapping (XInput):
+  // 0:A, 1:B, 2:X, 3:Y, 12:Up, 13:Down, 14:Left, 15:Right
+  if (index === 2) return 'U'; // X -> internal U
+  if (index === 3) return 'I'; // Y -> internal I
+  if (index === 0) return 'J'; // A -> internal J
+  if (index === 1) return 'K'; // B -> internal K
+  if (index === 12) return 'W';
+  if (index === 13) return 'S';
+  if (index === 14) return 'A';
+  if (index === 15) return 'D';
   return null;
 }
 
@@ -313,12 +336,9 @@ ipcMain.on('gp:event', (_e, payload) => {
   const key = gamepadButtonIndexToKey(payload.index);
   if (!key) return;
 
-  // HUD on press
   if (payload.pressed) {
     ensureOverlay().webContents.send('key', { label: key });
   }
-
-  // Record while in recording mode
   if (mode === 'recording') {
     recEvents.push({
       t: Date.now() - recStartTs,
@@ -358,7 +378,7 @@ function wireShortcuts() {
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
-  ensureGamepadBridge();  // start hidden gamepad bridge
+  ensureGamepadBridge();  // start hidden gamepad bridge (Windows controller recording)
   startPadServer();
   wireKeys();
   wireIPC();

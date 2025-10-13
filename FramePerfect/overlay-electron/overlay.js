@@ -1,14 +1,16 @@
+// overlay-electron/overlay.js
 const stack    = document.getElementById('stack');
 const statusEl = document.getElementById('status');
 const modeEl   = document.getElementById('mode');
 const recDot   = document.getElementById('recdot');
 
-function toTekkenLabel(raw) {
+// Show face buttons as arrows; directions stay Tekken u/f/d/b
+function toHudLabel(raw) {
   const s = String(raw).toUpperCase();
-  if (s === 'U') return '1';
-  if (s === 'I') return '2';
-  if (s === 'J') return '3';
-  if (s === 'K') return '4';
+  if (s === 'U') return '↑'; // was "1"
+  if (s === 'I') return '→'; // was "2"
+  if (s === 'J') return '↓'; // was "3"
+  if (s === 'K') return '←'; // was "4"
   if (s === 'W') return 'u';
   if (s === 'D') return 'f';
   if (s === 'S') return 'd';
@@ -32,7 +34,7 @@ function keyClass(raw) {
 function push(raw) {
   const div = document.createElement('div');
   div.className = 'key ' + keyClass(raw);
-  div.textContent = toTekkenLabel(raw);
+  div.textContent = toHudLabel(raw);
   stack.appendChild(div);
   setTimeout(() => div.remove(), 1300);
 }
