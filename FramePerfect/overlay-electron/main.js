@@ -1,4 +1,4 @@
-// main.js
+// overlay-electron/main.js
 const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -6,14 +6,14 @@ const { spawn } = require('child_process');
 
 let overlayWin = null;
 let launcherWin = null;
+
 let mode = 'idle';
 let providerName = 'unknown';
 let injectEnabled = true;
 
-// recording
+// recording (v2: [{ t, type: 'down'|'up', key: <canonical> }])
 let recStartTs = 0;
-let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]
-let heldKeys = new Set(); // <-- NEW: track currently-held internal pad keys
+let recEvents = [];
 
 // playback
 let playbackTimers = [];
@@ -34,7 +34,8 @@ function startPadServer() {
   padProc = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
   padStdin = padProc.stdin;
   padProc.on('exit', (code) => {
-    padProc = null; padStdin = null;
+    padProc = null;
+    padStdin = null;
     setStatus({ ok: false, error: `FpPad exited ${code}` });
   });
 }
@@ -45,28 +46,17 @@ function padSend(line) {
   if (!padStdin) return;
   try { padStdin.write(line + '\n'); } catch {}
 }
+
+function padStop() { padSend('stop'); }
 // --------------------------------------------------------------
 
-// ---------- helpers ----------
-function nowMs() { return Date.now(); }
-
+// ---------- HUD/status ----------
 function setStatus(obj) {
   const w = ensureOverlay();
   w.webContents.send('status', { ...obj, mode, provider: providerName });
 }
 
-function clearPlayback() {
-  playbackTimers.forEach(clearTimeout);
-  playbackTimers = [];
-  if (playbackEndTimer) { clearTimeout(playbackEndTimer); playbackEndTimer = null; }
-}
-
-function stopPlayback() {
-  clearPlayback();
-  mode = 'idle';
-  setStatus({ ok: true, message: 'Playback stopped' });
-}
-
+// ---------- windows ----------
 function ensureOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
   overlayWin = new BrowserWindow({
@@ -86,60 +76,68 @@ function ensureOverlay() {
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
   launcherWin = new BrowserWindow({
-    width: 560, height: 420, title: 'FramePerfect Overlay',
+    width: 420, height: 280, title: 'FramePerfect Overlay',
     resizable: false, frame: true, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   launcherWin.loadFile(path.join(__dirname, 'launcher.html'));
-  launcherWin.webContents.on('did-finish-load', () => {
-    launcherWin.webContents.send('launcher:init', { canInject: process.platform === 'win32' });
-  });
   return launcherWin;
 }
 
-/**
- * Map internal pad key to HUD-friendly label (Tekken numbers and arrows).
- */
+// ---------- mappings ----------
+// Canonical pad keys we store/send: W A S D  J K M COMMA  B V
+// Tekken notation: 1=Square(J), 2=Triangle(K), 3=Cross(M), 4=Circle(COMMA)
 function displayLabelForPadKey(k) {
-  switch (String(k).toUpperCase()) {
-    case 'W': return '↑';            // Up
-    case 'A': return '←';            // Left
-    case 'S': return '↓';            // Down
-    case 'D': return '→';            // Right
-    case 'J': return '1';            // LP
-    case 'K': return '2';            // RP
-    case 'M': return '3';            // LK
-    case 'COMMA': return '4';        // RK
-    case 'B': return '⏯';            // Start/Options
-    case 'V': return '⏹';            // Back/Select
-    default:  return String(k);
+  switch (k) {
+    case 'J': return '1';
+    case 'K': return '2';
+    case 'M': return '3';
+    case 'COMMA': return '4';
+    case 'W': return '↑';
+    case 'A': return '←';
+    case 'S': return '↓';
+    case 'D': return '→';
+    case 'B': return 'Options';
+    case 'V': return 'Select';
+    default:  return k;
   }
 }
 
-/**
- * Normalize raw keyboard labels to the internal pad key set used for recording/injection.
- * Supports: WASD, Arrow keys, and U/I/J/K -> Tekken 1–4.
- * Internal set allowed by FpPad: W A S D J K M COMMA B V
- */
+// Only for RAW keyboard → canonical (recording and v1 upgrade). Never for v2 playback.
+// UIJK → 1,2,3,4 exclusively; physical M and ',' are not accepted as 3/4.
 function mapToPadKey(label) {
   if (!label) return null;
   const s0 = String(label).toUpperCase();
+
+  // block legacy physical 3/4
+  if (s0 === 'M') return null;
+  if (s0 === ',') return null;
+
   const alias = {
-    'ARROWUP':'W', 'UP':'W',
-    'ARROWDOWN':'S', 'DOWN':'S',
-    'ARROWLEFT':'A', 'LEFT':'A',
-    'ARROWRIGHT':'D', 'RIGHT':'D',
-    'U':'J',       // 1 / LP
-    'I':'K',       // 2 / RP
-    'J':'M',       // 3 / LK
-    'K':'COMMA'    // 4 / RK
+    ',': 'COMMA', // in case a raw comma slips in
+
+    // UIJK → canonical face buttons
+    'U': 'J',        // 1 (Square)
+    'I': 'K',        // 2 (Triangle)
+    'J': 'M',        // 3 (Cross)
+    'K': 'COMMA',    // 4 (Circle)
+
+    // direction synonyms
+    'ARROWUP': 'W',   'UP': 'W',
+    'ARROWDOWN': 'S', 'DOWN': 'S',
+    'ARROWLEFT': 'A', 'LEFT': 'A',
+    'ARROWRIGHT': 'D','RIGHT': 'D',
+
+    // options/select
+    'ESCAPE': 'B', 'ENTER': 'V'
   };
+
   const s = alias[s0] || s0;
   const allowed = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
   return allowed.has(s) ? s : null;
 }
 
-// Group v1 single-key events in a tiny window to make chords; then synthesize holds
+// v1 upgrade: group close events into chords, synthesize holds, and convert to v2 down/up
 function groupEventsForChords(events, windowMs = 35) {
   const out = [];
   let i = 0;
@@ -157,7 +155,6 @@ function groupEventsForChords(events, windowMs = 35) {
   return out;
 }
 
-// Upgrade v1 -> v2 timeline with synthetic holds
 function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
   const chords = groupEventsForChords(v1events, windowMs);
   const v2 = [];
@@ -173,16 +170,29 @@ function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
 }
 
 // ---------- playback ----------
+function clearPlayback() {
+  playbackTimers.forEach(clearTimeout);
+  playbackTimers = [];
+  if (playbackEndTimer) { clearTimeout(playbackEndTimer); playbackEndTimer = null; }
+}
+
+function stopPlayback() {
+  clearPlayback();
+  padStop();
+  mode = 'idle';
+  setStatus({ ok: true, message: 'Playback stopped' });
+}
+
 function startPlaybackFromV2(v2events, durationMs) {
   clearPlayback();
   mode = 'playback';
-  const start = nowMs();
+  const start = Date.now();
   const w = ensureOverlay();
 
   for (const ev of v2events) {
     const id = setTimeout(() => {
       if (ev.type === 'down') {
-        w.webContents.send('key', { label: displayLabelForPadKey(ev.key), playback: true, at: nowMs() - start });
+        w.webContents.send('key', { label: displayLabelForPadKey(ev.key), playback: true, at: Date.now() - start });
         padSend(`down ${ev.key}`);
       } else if (ev.type === 'up') {
         padSend(`up ${ev.key}`);
@@ -191,35 +201,21 @@ function startPlaybackFromV2(v2events, durationMs) {
     playbackTimers.push(id);
   }
 
-  playbackEndTimer = setTimeout(() => { stopPlayback(); }, Math.max(0, durationMs));
+  playbackEndTimer = setTimeout(() => { stopPlayback(); }, Math.max(0, (durationMs|0) + 30));
   setStatus({ ok: true, message: 'Playback' });
 }
 
 // ---------- record ----------
 function startRecording() {
   mode = 'recording';
-  recStartTs = nowMs();
+  recStartTs = Date.now();
   recEvents = [];
-  heldKeys.clear(); // <-- reset held set
   setStatus({ ok: true, message: 'Recording' });
-}
-
-function flushReleasesAtSave() {
-  // For any key still held, synthesize an UP at save time
-  if (heldKeys.size === 0) return;
-  const t = nowMs() - recStartTs;
-  for (const k of Array.from(heldKeys)) {
-    recEvents.push({ t, type: 'up', key: k });
-  }
-  heldKeys.clear();
 }
 
 async function stopRecordingAndSave() {
   if (mode !== 'recording') return;
-  // Ensure no stuck keys remain
-  flushReleasesAtSave();
-
-  const durationMs = nowMs() - recStartTs;
+  const durationMs = Date.now() - recStartTs;
   const payload = {
     type: 'frameperfect.keys',
     version: 2,
@@ -255,6 +251,7 @@ async function chooseAndPlay(filePathArg) {
     if (canceled || !filePaths || !filePaths[0]) return;
     fileToOpen = filePaths[0];
   }
+
   const text = fs.readFileSync(fileToOpen, 'utf-8');
   const json = JSON.parse(text);
 
@@ -263,17 +260,22 @@ async function chooseAndPlay(filePathArg) {
     return;
   }
 
-  // Accept v2 directly, upgrade v1 automatically
+  const ALLOWED = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
+
   let v2events, duration;
-  if (json.version >= 2 && Array.isArray(json.events) && json.events[0]?.type) {
+  if (json.version >= 2 && Array.isArray(json.events) && (json.events[0]?.type === 'down' || json.events[0]?.type === 'up')) {
+    // v2: trust file; do NOT call mapToPadKey here
     v2events = json.events
-      // Keys should already be internal; map again harmlessly to be safe
-      .map(ev => ({ t: ev.t|0, type: ev.type, key: mapToPadKey(ev.key || ev.label) }))
-      .filter(ev => ev.key && (ev.type === 'down' || ev.type === 'up'))
+      .map(ev => ({
+        t: ev.t|0,
+        type: ev.type === 'down' ? 'down' : ev.type === 'up' ? 'up' : null,
+        key: String(ev.key || '').toUpperCase()
+      }))
+      .filter(ev => ev.type && ALLOWED.has(ev.key))
       .sort((a,b)=>a.t-b.t);
     duration = json.durationMs ?? (v2events.length ? v2events[v2events.length-1].t + 30 : 0);
   } else {
-    // v1: array of {t,label}
+    // v1: upgrade using RAW→canonical mapping
     const v1events = (json.events || []).map(e => ({ t: e.t|0, label: e.label }));
     const upgraded = upgradeV1ToV2(v1events);
     v2events = upgraded.events;
@@ -286,19 +288,19 @@ async function chooseAndPlay(filePathArg) {
 
 // ---------- key hook ----------
 function wireKeys() {
-  let addListener = null, stop = null;
+  let add = null, stop = null;
 
   try {
     const { GlobalKeyboardListener } = require('node-global-key-listener');
     const gkl = new GlobalKeyboardListener();
     providerName = 'node-global-key-listener';
-    addListener = (fn) => gkl.addListener((e) => fn(e));
+    add = (fn) => gkl.addListener((e) => fn(e));
     stop = () => gkl.removeAllListeners();
   } catch {
     try {
       const iohook = require('iohook');
       providerName = 'iohook';
-      addListener = (fn) => {
+      add = (fn) => {
         iohook.on('keydown', e => fn({ ...e, state: 'DOWN' }));
         iohook.on('keyup',   e => fn({ ...e, state: 'UP' }));
         iohook.start();
@@ -309,11 +311,11 @@ function wireKeys() {
     }
   }
 
-  if (!addListener) { setStatus({ ok: false, error: 'No global key provider' }); return; }
+  if (!add) { setStatus({ ok: false, error: 'No global key provider' }); return; }
   setStatus({ ok: true, message: 'Ready' });
 
-  addListener((e) => {
-    // Normalize
+  add((e) => {
+    // normalize raw name
     const rawName =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
@@ -321,27 +323,20 @@ function wireKeys() {
       (e.keycode && `Keycode:${e.keycode}`) ||
       '';
 
-    const padKey = mapToPadKey(String(rawName)); // null for non-pad keys (mouse etc.)
-
-    // HUD: show only on DOWN and only when it maps to a pad key
-    if (e.state === 'DOWN' && padKey) {
-      ensureOverlay().webContents.send('key', { label: displayLabelForPadKey(padKey) });
+    // HUD: show mapped Tekken notation for mapped keys on DOWN; else show raw
+    if (e.state === 'DOWN') {
+      const k = mapToPadKey(String(rawName));
+      const label = k ? displayLabelForPadKey(k) : String(rawName);
+      ensureOverlay().webContents.send('key', { label });
     }
 
-    // Recording fidelity (ignore un-mapped; debounce repeats; track holds)
-    if (mode === 'recording' && padKey) {
-      const t = nowMs() - recStartTs;
-      if (e.state === 'DOWN') {
-        if (!heldKeys.has(padKey)) {           // <-- ignore auto-repeat DOWNs
-          recEvents.push({ t, type: 'down', key: padKey });
-          heldKeys.add(padKey);
-        }
-      } else if (e.state === 'UP') {
-        if (heldKeys.has(padKey)) {            // <-- only emit UP if we had a DOWN
-          recEvents.push({ t, type: 'up', key: padKey });
-          heldKeys.delete(padKey);
-        }
-      }
+    // recording: RAW → canonical here only
+    if (mode === 'recording') {
+      const k = mapToPadKey(String(rawName));
+      if (!k) return;
+      const type = (e.state === 'DOWN') ? 'down' : (e.state === 'UP' ? 'up' : null);
+      if (!type) return;
+      recEvents.push({ t: Date.now() - recStartTs, type, key: k });
     }
   });
 
