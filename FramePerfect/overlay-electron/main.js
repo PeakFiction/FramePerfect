@@ -1,4 +1,4 @@
-// overlay-electron/main.js
+// main.js
 const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -6,14 +6,13 @@ const { spawn } = require('child_process');
 
 let overlayWin = null;
 let launcherWin = null;
-let gpWin = null; // hidden gamepad bridge
 let mode = 'idle';
 let providerName = 'unknown';
 let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
-let recEvents = []; // v2: [{ t, type:'down'|'up', key:'W'|'A'|'S'|'D'|'U'|'I'|'J'|'K' }]
+let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]  v1: [{t,label}]
 
 // playback
 let playbackTimers = [];
@@ -39,23 +38,6 @@ function startPadServer() {
   });
 }
 
-// Translate internal keys -> FpPad/XInput tokens
-// Internal keys: U,I,J,K,W,A,S,D
-// XInput tokens (common): A,B,X,Y,DUP,DDOWN,DLEFT,DRIGHT
-function injectTokenForKey(k) {
-  switch (String(k).toUpperCase()) {
-    case 'U': return 'X';       // X button
-    case 'I': return 'Y';       // Y button
-    case 'J': return 'A';       // A button
-    case 'K': return 'B';       // B button
-    case 'W': return 'DUP';
-    case 'S': return 'DDOWN';
-    case 'A': return 'DLEFT';
-    case 'D': return 'DRIGHT';
-    default:  return null;
-  }
-}
-
 function padSend(line) {
   if (!injectEnabled || process.platform !== 'win32') return;
   if (!padStdin) startPadServer();
@@ -63,24 +45,6 @@ function padSend(line) {
   try { padStdin.write(line + '\n'); } catch {}
 }
 // --------------------------------------------------------------
-
-// ---------------- Gamepad bridge window ----------------
-function ensureGamepadBridge() {
-  if (gpWin && !gpWin.isDestroyed()) return gpWin;
-  gpWin = new BrowserWindow({
-    show: false,
-    width: 300, height: 80,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload-gamepad.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      backgroundThrottling: false,
-    }
-  });
-  gpWin.loadFile(path.join(__dirname, 'gamepad-bridge.html'));
-  return gpWin;
-}
-// -------------------------------------------------------
 
 // ---------- helpers ----------
 function setStatus(obj) {
@@ -119,23 +83,66 @@ function ensureOverlay() {
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
   launcherWin = new BrowserWindow({
-    width: 640, height: 360, title: 'FramePerfect Overlay',
+    width: 560, height: 420, title: 'FramePerfect Overlay',
     resizable: false, frame: true, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   launcherWin.loadFile(path.join(__dirname, 'launcher.html'));
+  launcherWin.webContents.on('did-finish-load', () => {
+    launcherWin.webContents.send('launcher:init', { canInject: process.platform === 'win32' });
+  });
   return launcherWin;
 }
 
-// Map raw keyboard labels to our internal keys
+/**
+ * Map internal pad key to HUD-friendly label (Tekken numbers and arrows).
+ */
+function displayLabelForPadKey(k) {
+  switch (String(k).toUpperCase()) {
+    case 'W': return '↑';            // Up
+    case 'A': return '←';            // Left
+    case 'S': return '↓';            // Down
+    case 'D': return '→';            // Right
+    case 'J': return '1';            // LP
+    case 'K': return '2';            // RP
+    case 'M': return '3';            // LK
+    case 'COMMA': return '4';        // RK
+    case 'B': return '⏯';            // Start/Options
+    case 'V': return '⏹';            // Back/Select
+    default:  return String(k);
+  }
+}
+
+/**
+ * Normalize raw keyboard labels to the internal pad key set used for recording/injection.
+ * Supports: WASD, Arrow keys, and U/I/J/K mapped to Tekken 1–4.
+ * Internal set allowed by FpPad: W A S D J K M COMMA B V
+ *
+ * Attacks:
+ *   U -> J (Tekken 1 / LP)
+ *   I -> K (Tekken 2 / RP)
+ *   J -> M (Tekken 3 / LK)
+ *   K -> COMMA (Tekken 4 / RK)
+ */
 function mapToPadKey(label) {
   if (!label) return null;
-  const s = String(label).toUpperCase();
-  const allowed = new Set(['W','A','S','D','U','I','J','K','B','V']);
+  const s0 = String(label).toUpperCase();
+  const alias = {
+    'ARROWUP':'W', 'UP':'W',
+    'ARROWDOWN':'S', 'DOWN':'S',
+    'ARROWLEFT':'A', 'LEFT':'A',
+    'ARROWRIGHT':'D', 'RIGHT':'D',
+    'U':'J',
+    'I':'K',
+    'J':'M',
+    'K':'COMMA'
+  };
+  const s = alias[s0] || s0;
+  const allowed = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
   return allowed.has(s) ? s : null;
 }
 
-// v1 -> v2 helpers (kept for compatibility)
+// Group v1 single-key events in a tiny window to make chords; then synthesize holds
 function groupEventsForChords(events, windowMs = 35) {
   const out = [];
   let i = 0;
@@ -153,6 +160,7 @@ function groupEventsForChords(events, windowMs = 35) {
   return out;
 }
 
+// Upgrade v1 -> v2 timeline with synthetic holds
 function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
   const chords = groupEventsForChords(v1events, windowMs);
   const v2 = [];
@@ -176,15 +184,12 @@ function startPlaybackFromV2(v2events, durationMs) {
 
   for (const ev of v2events) {
     const id = setTimeout(() => {
-      // HUD pill only on press
       if (ev.type === 'down') {
-        w.webContents.send('key', { label: ev.key, playback: true, at: Date.now() - start });
-      }
-      // Inject to virtual pad (Windows only)
-      const tok = injectTokenForKey(ev.key);
-      if (tok) {
-        if (ev.type === 'down') padSend(`down ${tok}`);
-        else if (ev.type === 'up') padSend(`up ${tok}`);
+        // HUD for downs (always Tekken/arrow)
+        w.webContents.send('key', { label: displayLabelForPadKey(ev.key), playback: true, at: Date.now() - start });
+        padSend(`down ${ev.key}`);
+      } else if (ev.type === 'up') {
+        padSend(`up ${ev.key}`);
       }
     }, Math.max(0, ev.t));
     playbackTimers.push(id);
@@ -248,6 +253,7 @@ async function chooseAndPlay(filePathArg) {
     return;
   }
 
+  // Accept v2 directly, upgrade v1 automatically
   let v2events, duration;
   if (json.version >= 2 && Array.isArray(json.events) && json.events[0]?.type) {
     v2events = json.events
@@ -256,6 +262,7 @@ async function chooseAndPlay(filePathArg) {
       .sort((a,b)=>a.t-b.t);
     duration = json.durationMs ?? (v2events.length ? v2events[v2events.length-1].t + 30 : 0);
   } else {
+    // v1: array of {t,label}
     const v1events = (json.events || []).map(e => ({ t: e.t|0, label: e.label }));
     const upgraded = upgradeV1ToV2(v1events);
     v2events = upgraded.events;
@@ -266,7 +273,7 @@ async function chooseAndPlay(filePathArg) {
   startPlaybackFromV2(v2events, duration);
 }
 
-// ---------- keyboard hook ----------
+// ---------- key hook ----------
 function wireKeys() {
   let addListener = null, stop = null;
 
@@ -295,15 +302,24 @@ function wireKeys() {
   setStatus({ ok: true, message: 'Ready' });
 
   addListener((e) => {
+    // Normalize
     const rawName =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
       (typeof e.keychar === 'string' && e.keychar) ||
       (e.keycode && `Keycode:${e.keycode}`) ||
       '';
+
+    // HUD: only on DOWN and only when it maps to a pad key (ignore mouse)
     if (e.state === 'DOWN') {
-      ensureOverlay().webContents.send('key', { label: String(rawName) });
+      const padK = mapToPadKey(String(rawName));
+      if (padK) {
+        const hudLabel = displayLabelForPadKey(padK);
+        ensureOverlay().webContents.send('key', { label: hudLabel });
+      }
     }
+
+    // Recording: store internal pad keys only
     if (mode === 'recording') {
       const k = mapToPadKey(String(rawName));
       if (!k) return;
@@ -316,45 +332,13 @@ function wireKeys() {
   app.on('will-quit', () => { try { stop && stop(); } catch {} });
 }
 
-// ---------- gamepad -> app mapping & IPC ----------
-function gamepadButtonIndexToKey(index) {
-  // Standard mapping (XInput):
-  // 0:A, 1:B, 2:X, 3:Y, 12:Up, 13:Down, 14:Left, 15:Right
-  if (index === 2) return 'U'; // X -> internal U
-  if (index === 3) return 'I'; // Y -> internal I
-  if (index === 0) return 'J'; // A -> internal J
-  if (index === 1) return 'K'; // B -> internal K
-  if (index === 12) return 'W';
-  if (index === 13) return 'S';
-  if (index === 14) return 'A';
-  if (index === 15) return 'D';
-  return null;
-}
-
-ipcMain.on('gp:event', (_e, payload) => {
-  if (!payload || payload.kind !== 'button') return;
-  const key = gamepadButtonIndexToKey(payload.index);
-  if (!key) return;
-
-  if (payload.pressed) {
-    ensureOverlay().webContents.send('key', { label: key });
-  }
-  if (mode === 'recording') {
-    recEvents.push({
-      t: Date.now() - recStartTs,
-      type: payload.pressed ? 'down' : 'up',
-      key
-    });
-  }
-});
-
-// ---------- IPC & shortcuts ----------
+// ---------- ipc & shortcuts ----------
 function wireIPC() {
   ipcMain.on('record:start',        () => { stopPlayback(); startRecording(); ensureOverlay().show(); });
   ipcMain.on('record:stopAndSave',  () => { stopRecordingAndSave(); });
   ipcMain.on('import:chooseAndPlay',() => { chooseAndPlay(); });
   ipcMain.on('playback:stop',       () => { stopPlayback(); });
-  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled ? 'ON' : 'OFF'}` }); });
+  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` }); });
 }
 
 function wireShortcuts() {
@@ -370,7 +354,7 @@ function wireShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+P', () => { if (mode === 'playback') stopPlayback(); else chooseAndPlay(); });
   globalShortcut.register('CommandOrControl+Shift+J', () => {
     injectEnabled = !injectEnabled;
-    setStatus({ ok:true, message:`Inject ${injectEnabled ? 'ON' : 'OFF'}` });
+    setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` });
   });
 }
 
@@ -378,7 +362,6 @@ function wireShortcuts() {
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
-  ensureGamepadBridge();  // start hidden gamepad bridge (Windows controller recording)
   startPadServer();
   wireKeys();
   wireIPC();
