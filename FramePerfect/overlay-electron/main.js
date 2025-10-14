@@ -12,7 +12,8 @@ let injectEnabled = true;
 
 // recording
 let recStartTs = 0;
-let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]  v1: [{t,label}]
+let recEvents = []; // v2: [{t, type:'down'|'up', key:'W'|'A'|...}]
+let heldKeys = new Set(); // <-- NEW: track currently-held internal pad keys
 
 // playback
 let playbackTimers = [];
@@ -47,6 +48,8 @@ function padSend(line) {
 // --------------------------------------------------------------
 
 // ---------- helpers ----------
+function nowMs() { return Date.now(); }
+
 function setStatus(obj) {
   const w = ensureOverlay();
   w.webContents.send('status', { ...obj, mode, provider: providerName });
@@ -115,14 +118,8 @@ function displayLabelForPadKey(k) {
 
 /**
  * Normalize raw keyboard labels to the internal pad key set used for recording/injection.
- * Supports: WASD, Arrow keys, and U/I/J/K mapped to Tekken 1–4.
+ * Supports: WASD, Arrow keys, and U/I/J/K -> Tekken 1–4.
  * Internal set allowed by FpPad: W A S D J K M COMMA B V
- *
- * Attacks:
- *   U -> J (Tekken 1 / LP)
- *   I -> K (Tekken 2 / RP)
- *   J -> M (Tekken 3 / LK)
- *   K -> COMMA (Tekken 4 / RK)
  */
 function mapToPadKey(label) {
   if (!label) return null;
@@ -132,10 +129,10 @@ function mapToPadKey(label) {
     'ARROWDOWN':'S', 'DOWN':'S',
     'ARROWLEFT':'A', 'LEFT':'A',
     'ARROWRIGHT':'D', 'RIGHT':'D',
-    'U':'J',
-    'I':'K',
-    'J':'M',
-    'K':'COMMA'
+    'U':'J',       // 1 / LP
+    'I':'K',       // 2 / RP
+    'J':'M',       // 3 / LK
+    'K':'COMMA'    // 4 / RK
   };
   const s = alias[s0] || s0;
   const allowed = new Set(['W','A','S','D','J','K','M','COMMA','B','V']);
@@ -179,14 +176,13 @@ function upgradeV1ToV2(v1events, holdMs = 55, windowMs = 35) {
 function startPlaybackFromV2(v2events, durationMs) {
   clearPlayback();
   mode = 'playback';
-  const start = Date.now();
+  const start = nowMs();
   const w = ensureOverlay();
 
   for (const ev of v2events) {
     const id = setTimeout(() => {
       if (ev.type === 'down') {
-        // HUD for downs (always Tekken/arrow)
-        w.webContents.send('key', { label: displayLabelForPadKey(ev.key), playback: true, at: Date.now() - start });
+        w.webContents.send('key', { label: displayLabelForPadKey(ev.key), playback: true, at: nowMs() - start });
         padSend(`down ${ev.key}`);
       } else if (ev.type === 'up') {
         padSend(`up ${ev.key}`);
@@ -202,14 +198,28 @@ function startPlaybackFromV2(v2events, durationMs) {
 // ---------- record ----------
 function startRecording() {
   mode = 'recording';
-  recStartTs = Date.now();
+  recStartTs = nowMs();
   recEvents = [];
+  heldKeys.clear(); // <-- reset held set
   setStatus({ ok: true, message: 'Recording' });
+}
+
+function flushReleasesAtSave() {
+  // For any key still held, synthesize an UP at save time
+  if (heldKeys.size === 0) return;
+  const t = nowMs() - recStartTs;
+  for (const k of Array.from(heldKeys)) {
+    recEvents.push({ t, type: 'up', key: k });
+  }
+  heldKeys.clear();
 }
 
 async function stopRecordingAndSave() {
   if (mode !== 'recording') return;
-  const durationMs = Date.now() - recStartTs;
+  // Ensure no stuck keys remain
+  flushReleasesAtSave();
+
+  const durationMs = nowMs() - recStartTs;
   const payload = {
     type: 'frameperfect.keys',
     version: 2,
@@ -257,6 +267,7 @@ async function chooseAndPlay(filePathArg) {
   let v2events, duration;
   if (json.version >= 2 && Array.isArray(json.events) && json.events[0]?.type) {
     v2events = json.events
+      // Keys should already be internal; map again harmlessly to be safe
       .map(ev => ({ t: ev.t|0, type: ev.type, key: mapToPadKey(ev.key || ev.label) }))
       .filter(ev => ev.key && (ev.type === 'down' || ev.type === 'up'))
       .sort((a,b)=>a.t-b.t);
@@ -310,22 +321,27 @@ function wireKeys() {
       (e.keycode && `Keycode:${e.keycode}`) ||
       '';
 
-    // HUD: only on DOWN and only when it maps to a pad key (ignore mouse)
-    if (e.state === 'DOWN') {
-      const padK = mapToPadKey(String(rawName));
-      if (padK) {
-        const hudLabel = displayLabelForPadKey(padK);
-        ensureOverlay().webContents.send('key', { label: hudLabel });
-      }
+    const padKey = mapToPadKey(String(rawName)); // null for non-pad keys (mouse etc.)
+
+    // HUD: show only on DOWN and only when it maps to a pad key
+    if (e.state === 'DOWN' && padKey) {
+      ensureOverlay().webContents.send('key', { label: displayLabelForPadKey(padKey) });
     }
 
-    // Recording: store internal pad keys only
-    if (mode === 'recording') {
-      const k = mapToPadKey(String(rawName));
-      if (!k) return;
-      const type = (e.state === 'DOWN') ? 'down' : (e.state === 'UP' ? 'up' : null);
-      if (!type) return;
-      recEvents.push({ t: Date.now() - recStartTs, type, key: k });
+    // Recording fidelity (ignore un-mapped; debounce repeats; track holds)
+    if (mode === 'recording' && padKey) {
+      const t = nowMs() - recStartTs;
+      if (e.state === 'DOWN') {
+        if (!heldKeys.has(padKey)) {           // <-- ignore auto-repeat DOWNs
+          recEvents.push({ t, type: 'down', key: padKey });
+          heldKeys.add(padKey);
+        }
+      } else if (e.state === 'UP') {
+        if (heldKeys.has(padKey)) {            // <-- only emit UP if we had a DOWN
+          recEvents.push({ t, type: 'up', key: padKey });
+          heldKeys.delete(padKey);
+        }
+      }
     }
   });
 
