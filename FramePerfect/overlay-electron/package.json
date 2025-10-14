@@ -17,14 +17,32 @@
   "build": {
     "appId": "com.frameperfect.overlay",
     "fileAssociations": [
-      { "ext": "fpkeys", "name": "FramePerfect Keystrokes", "mimeType": "application/x-frameperfect-keys" }
+      {
+        "ext": "fpkeys",
+        "name": "FramePerfect Keystrokes",
+        "mimeType": "application/x-frameperfect-keys"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "protocols": [{ "name": "FramePerfect", "schemes": ["frameperfect"] }]
+      "protocols": [
+        {
+          "name": "FramePerfect",
+          "schemes": [
+            "frameperfect"
+          ]
+        }
+      ]
     },
     "win": {
-      "protocols": [{ "name": "FramePerfect", "schemes": ["frameperfect"] }]
+      "protocols": [
+        {
+          "name": "FramePerfect",
+          "schemes": [
+            "frameperfect"
+          ]
+        }
+      ]
     }
   }
 }

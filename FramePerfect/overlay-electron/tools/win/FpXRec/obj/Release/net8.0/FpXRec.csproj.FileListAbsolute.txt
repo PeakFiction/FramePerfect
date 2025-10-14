@@ -1,0 +1,15 @@
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.AssemblyInfoInputs.cache
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.AssemblyInfo.cs
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.csproj.CoreCompileInputs.cache
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.sourcelink.json
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\FpXRec.exe
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\FpXRec.deps.json
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\FpXRec.runtimeconfig.json
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\FpXRec.dll
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\FpXRec.pdb
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.dll
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\refint\FpXRec.dll
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.pdb
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\FpXRec.genruntimeconfig.cache
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\obj\Release\net8.0\ref\FpXRec.dll

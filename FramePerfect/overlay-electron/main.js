@@ -8,18 +8,19 @@ let overlayWin = null;
 let launcherWin = null;
 
 let mode = 'idle';
-let providerName = 'unknown';
+let providerName = 'unknown';       // keyboard hook provider label
 let injectEnabled = true;
 
-// recording (v2: [{ t, type: 'down'|'up', key: <canonical> }])
+// recording (v2: [{ t, type:'down'|'up', key:<canonical> }])
 let recStartTs = 0;
 let recEvents = [];
+let padEventsSeen = false;          // tag file provider when saving
 
 // playback
 let playbackTimers = [];
 let playbackEndTimer = null;
 
-// ---------------- ViGEm pad server (FpPad.exe) ----------------
+// ---------------- ViGEm sender (FpPad.exe) ----------------
 let padProc = null;
 let padStdin = null;
 
@@ -48,7 +49,71 @@ function padSend(line) {
 }
 
 function padStop() { padSend('stop'); }
-// --------------------------------------------------------------
+// ----------------------------------------------------------
+
+// ---------------- XInput recorder (FpXRec.exe) ------------
+const XREC_EXE = path.join(__dirname, 'tools', 'win', 'FpXRec', 'bin', 'Release', 'net8.0', 'FpXRec.exe');
+let xrecProcs = []; // [{proc,buf,idx}]
+
+function handlePadEvent(type, key) {
+  // HUD on downs
+  if (type === 'down') {
+    ensureOverlay().webContents.send('key', { label: displayLabelForPadKey(key) });
+  }
+  // Record if active
+  if (mode === 'recording') {
+    padEventsSeen = true;
+    recEvents.push({ t: Date.now() - recStartTs, type, key: String(key).toUpperCase() });
+  }
+}
+
+function startXRecOne(index, hz = 120, axisFallback = true) {
+  if (process.platform !== 'win32') return;
+  if (!fs.existsSync(XREC_EXE)) {
+    setStatus({ ok: false, error: `FpXRec missing: ${XREC_EXE}` });
+    return;
+  }
+  const proc = spawn(XREC_EXE, ['--index', String(index), '--hz', String(hz), '--axisFallback', String(axisFallback)], {
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const rec = { proc, buf: '', idx: index };
+  proc.stdout.on('data', (chunk) => {
+    rec.buf += chunk.toString('utf-8');
+    let nl;
+    while ((nl = rec.buf.indexOf('\n')) >= 0) {
+      const line = rec.buf.slice(0, nl).trim();
+      rec.buf = rec.buf.slice(nl + 1);
+      // Expect: "down J" or "up COMMA"
+      if (!line) continue;
+      const [type, key] = line.split(/\s+/, 2);
+      if ((type === 'down' || type === 'up') && key) {
+        handlePadEvent(type, key.toUpperCase());
+      }
+    }
+  });
+  proc.on('exit', (code) => {
+    setStatus({ ok: false, error: `FpXRec[${index}] exited ${code}` });
+  });
+  xrecProcs.push(rec);
+}
+
+function startXRecAll() {
+  // Spawn all four XInput slots; whichever device is active will produce events
+  stopXRecAll();
+  startXRecOne(0, 120, true);
+  startXRecOne(1, 120, true);
+  startXRecOne(2, 120, true);
+  startXRecOne(3, 120, true);
+}
+
+function stopXRecAll() {
+  for (const r of xrecProcs) {
+    try { r.proc.kill(); } catch {}
+  }
+  xrecProcs = [];
+}
+// ----------------------------------------------------------
 
 // ---------- HUD/status ----------
 function setStatus(obj) {
@@ -85,14 +150,12 @@ function ensureLauncher() {
 }
 
 // ---------- mappings ----------
-// Canonical pad keys we store/send: W A S D  J K M COMMA  B V
-// Tekken notation: 1=Square(J), 2=Triangle(K), 3=Cross(M), 4=Circle(COMMA)
 function displayLabelForPadKey(k) {
   switch (k) {
-    case 'J': return '1';
-    case 'K': return '2';
-    case 'M': return '3';
-    case 'COMMA': return '4';
+    case 'J': return '1';        // Square
+    case 'K': return '2';        // Triangle
+    case 'M': return '3';        // Cross
+    case 'COMMA': return '4';    // Circle
     case 'W': return '↑';
     case 'A': return '←';
     case 'S': return '↓';
@@ -103,32 +166,22 @@ function displayLabelForPadKey(k) {
   }
 }
 
-// Only for RAW keyboard → canonical (recording and v1 upgrade). Never for v2 playback.
-// UIJK → 1,2,3,4 exclusively; physical M and ',' are not accepted as 3/4.
+// RAW keyboard → canonical (record + v1 upgrade). Never on v2 playback.
+// UIJK → 1..4; block physical M/',' as 3/4 if you want UIJK-only on keyboard.
 function mapToPadKey(label) {
   if (!label) return null;
   const s0 = String(label).toUpperCase();
 
-  // block legacy physical 3/4
   if (s0 === 'M') return null;
   if (s0 === ',') return null;
 
   const alias = {
-    ',': 'COMMA', // in case a raw comma slips in
-
-    // UIJK → canonical face buttons
-    'U': 'J',        // 1 (Square)
-    'I': 'K',        // 2 (Triangle)
-    'J': 'M',        // 3 (Cross)
-    'K': 'COMMA',    // 4 (Circle)
-
-    // direction synonyms
+    ',': 'COMMA',
+    'U': 'J', 'I': 'K', 'J': 'M', 'K': 'COMMA',
     'ARROWUP': 'W',   'UP': 'W',
     'ARROWDOWN': 'S', 'DOWN': 'S',
     'ARROWLEFT': 'A', 'LEFT': 'A',
     'ARROWRIGHT': 'D','RIGHT': 'D',
-
-    // options/select
     'ESCAPE': 'B', 'ENTER': 'V'
   };
 
@@ -137,7 +190,7 @@ function mapToPadKey(label) {
   return allowed.has(s) ? s : null;
 }
 
-// v1 upgrade: group close events into chords, synthesize holds, and convert to v2 down/up
+// v1 → v2 upgrade (chord window + synthetic hold)
 function groupEventsForChords(events, windowMs = 35) {
   const out = [];
   let i = 0;
@@ -145,10 +198,7 @@ function groupEventsForChords(events, windowMs = 35) {
     const t0 = events[i].t;
     const labels = [events[i].label];
     let j = i + 1;
-    while (j < events.length && (events[j].t - t0) <= windowMs) {
-      labels.push(events[j].label);
-      j++;
-    }
+    while (j < events.length && (events[j].t - t0) <= windowMs) { labels.push(events[j].label); j++; }
     out.push({ t: t0, labels });
     i = j;
   }
@@ -210,6 +260,7 @@ function startRecording() {
   mode = 'recording';
   recStartTs = Date.now();
   recEvents = [];
+  padEventsSeen = false;
   setStatus({ ok: true, message: 'Recording' });
 }
 
@@ -221,7 +272,7 @@ async function stopRecordingAndSave() {
     version: 2,
     createdAt: new Date().toISOString(),
     platform: process.platform,
-    provider: providerName,
+    provider: padEventsSeen ? 'xinput+keyboard' : providerName,
     durationMs,
     events: recEvents,
   };
@@ -264,7 +315,6 @@ async function chooseAndPlay(filePathArg) {
 
   let v2events, duration;
   if (json.version >= 2 && Array.isArray(json.events) && (json.events[0]?.type === 'down' || json.events[0]?.type === 'up')) {
-    // v2: trust file; do NOT call mapToPadKey here
     v2events = json.events
       .map(ev => ({
         t: ev.t|0,
@@ -275,7 +325,6 @@ async function chooseAndPlay(filePathArg) {
       .sort((a,b)=>a.t-b.t);
     duration = json.durationMs ?? (v2events.length ? v2events[v2events.length-1].t + 30 : 0);
   } else {
-    // v1: upgrade using RAW→canonical mapping
     const v1events = (json.events || []).map(e => ({ t: e.t|0, label: e.label }));
     const upgraded = upgradeV1ToV2(v1events);
     v2events = upgraded.events;
@@ -286,7 +335,7 @@ async function chooseAndPlay(filePathArg) {
   startPlaybackFromV2(v2events, duration);
 }
 
-// ---------- key hook ----------
+// ---------- keyboard hook ----------
 function wireKeys() {
   let add = null, stop = null;
 
@@ -315,7 +364,6 @@ function wireKeys() {
   setStatus({ ok: true, message: 'Ready' });
 
   add((e) => {
-    // normalize raw name
     const rawName =
       e.name ||
       (e.rawKey && e.rawKey.code) ||
@@ -323,14 +371,12 @@ function wireKeys() {
       (e.keycode && `Keycode:${e.keycode}`) ||
       '';
 
-    // HUD: show mapped Tekken notation for mapped keys on DOWN; else show raw
     if (e.state === 'DOWN') {
       const k = mapToPadKey(String(rawName));
       const label = k ? displayLabelForPadKey(k) : String(rawName);
       ensureOverlay().webContents.send('key', { label });
     }
 
-    // recording: RAW → canonical here only
     if (mode === 'recording') {
       const k = mapToPadKey(String(rawName));
       if (!k) return;
@@ -349,7 +395,7 @@ function wireIPC() {
   ipcMain.on('record:stopAndSave',  () => { stopRecordingAndSave(); });
   ipcMain.on('import:chooseAndPlay',() => { chooseAndPlay(); });
   ipcMain.on('playback:stop',       () => { stopPlayback(); });
-  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` }); });
+  ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON' : 'OFF'}` }); });
 }
 
 function wireShortcuts() {
@@ -373,8 +419,9 @@ function wireShortcuts() {
 app.whenReady().then(() => {
   ensureLauncher();
   ensureOverlay();
-  startPadServer();
-  wireKeys();
+  startPadServer();   // ViGEm sender
+  startXRecAll();     // XInput recorder on indices 0..3
+  wireKeys();         // keyboard recorder
   wireIPC();
   wireShortcuts();
 });
