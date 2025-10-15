@@ -4,6 +4,7 @@ import CharacterSelect from './pages/CharacterSelect.jsx';
 import ComboMaker from './pages/ComboMaker.jsx';   // builder ikon (baru)
 import Moves from './pages/Moves.jsx';
 import Calculator from './pages/Calculator.jsx';
+import Playlist from './pages/Playlist.jsx';
 
 export default function App() {
   return (
@@ -15,18 +16,14 @@ export default function App() {
       </nav>
 
       <Routes>
-        {/* Home: daftar karakter */}
         <Route path="/" element={<CharacterSelect />} />
-
-        {/* Halaman Moves: dukung /moves dan /moves/:char */}
         <Route path="/moves" element={<Moves />} />
         <Route path="/moves/:char" element={<Moves />} />
+        <Route path="/playlist" element={<Playlist />} /> 
 
-        {/* Combo Maker: dukung /combo dan /combo/:char */}
         <Route path="/combo" element={<ComboMaker />} />
         <Route path="/combo/:char" element={<ComboMaker />} />
 
-        {/* Kalkulator sederhana */}
         <Route path="/calculator" element={<Calculator />} />
       </Routes>
     </BrowserRouter>
