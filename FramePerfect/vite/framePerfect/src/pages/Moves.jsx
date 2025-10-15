@@ -1,34 +1,34 @@
-import { useExportData } from '../data/useData.js';
+import { useExportData, useCharacter, slugify } from '../data/useData.js';
 import { useSearchParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 
-const norm = (v) => (v ?? '').toString().trim().toLowerCase();
-
-export default function ComboMaker() {
+export default function Moves() {
   const data = useExportData();
   const [params] = useSearchParams();
+
+  // local prefs
   const [favs, setFavs] = useState(() => new Set(JSON.parse(localStorage.getItem('fp_favorites') || '[]')));
   const [notes, setNotes] = useState(() => JSON.parse(localStorage.getItem('fp_notes') || '{}'));
 
-  // pakai SLUG dari query (?char=alisa)
-  const slugParam = norm(params.get('char') || '');
+  // ?char= bisa "Armor King" atau "armorking"
+  const charParam = params.get('char') || '';
+  const character = useCharacter(data, charParam);
 
-  const character = useMemo(() => {
-    if (!data) return null;
-    return (data.characters || []).find((c) => norm(c.slug) === slugParam) || null;
-  }, [data, slugParam]);
-
-  // di JSON moves, characterID kamu juga slug (mis. "alisa", "deviljin")
-  const cid = character ? norm(character.slug || character.characterID) : '';
-
+  // ambil dan urutkan moves untuk karakter ini
   const moves = useMemo(() => {
-    if (!data || !cid) return [];
-    const list = (data.moves || []).filter((m) => norm(m.characterID) === cid);
-    // urutkan: No. lalu moveID
-    list.sort((a, b) => (a.no ?? 999999) - (b.no ?? 999999) || (a.moveID > b.moveID ? 1 : -1));
+    if (!data || !character) return [];
+    const key = character.key; // contoh: 'armorking'
+    const list = (data.moves || []).filter((m) => (m.charKey ?? slugify(m.characterID)) === key);
+    list.sort(
+      (a, b) =>
+        (a.no ?? 1e9) - (b.no ?? 1e9) ||
+        String(a.notation || '').localeCompare(String(b.notation || '')) ||
+        String(a.moveID).localeCompare(String(b.moveID))
+    );
     return list;
-  }, [data, cid]);
+  }, [data, character]);
 
+  // fav & notes helpers
   const isFavorite = (id) => favs.has(id);
   const toggleFavorite = (id) => {
     const next = new Set(favs);
@@ -36,12 +36,10 @@ export default function ComboMaker() {
     setFavs(next);
     localStorage.setItem('fp_favorites', JSON.stringify([...next]));
   };
-
   const getNote = (id) => notes[id] || '';
   const setNote = (id, text) => {
     const next = { ...notes };
-    if (!text) delete next[id];
-    else next[id] = text;
+    if (!text) delete next[id]; else next[id] = text;
     setNotes(next);
     localStorage.setItem('fp_notes', JSON.stringify(next));
   };
@@ -80,11 +78,7 @@ export default function ComboMaker() {
                       ) : null
                     )}
                   </div>
-                  {m.notes && (
-                    <div className="notes">
-                     {m.notes}
-                   </div>
-                 )}
+                  {m.notes && <div className="notes">{m.notes}</div>}
                 </div>
                 <button className="fav" onClick={() => toggleFavorite(id)}>
                   {isFavorite(id) ? '★' : '☆'}
