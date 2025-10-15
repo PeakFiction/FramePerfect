@@ -1,74 +1,186 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline' 'self'">
   <title>FramePerfect Overlay</title>
   <style>
     :root{
-      --bg:#0f1115; --panel:#151821; --panel-2:#11141b; --text:#e8eaf1; --muted:#a0a7b6;
-      --accent:#7c8cff; --danger:#ff6b6b; --ring:rgba(124,140,255,.55); --border:rgba(255,255,255,0.1);
-      --shadow:0 10px 30px rgba(0,0,0,.35); --radius:16px;
+      --bg:#0a0c10; --panel:#111521; --panel-2:#0c0f16;
+      --text:#ffffff; --muted:#b9c3d4;
+      --tekken:#ff7a1a;         /* Orange accent */
+      --heat:#ff2d2d;           /* Red (HEAT) */
+      --border:rgba(255,255,255,.18);
+      --metal:linear-gradient(180deg,#1b2030,#0f131d);
+      --shadow:0 10px 26px rgba(0,0,0,.5);
     }
     *{box-sizing:border-box}
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{padding:20px 22px 16px;display:grid;gap:16px}
-    .header{display:flex;align-items:center;justify-content:space-between}
-    .title{font-weight:700;letter-spacing:.2px}
+    html,body{
+      margin:0;padding:0;background:var(--bg);color:var(--text);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      
+    }
+
+    /* ==== HEADER ==== */
+    .wrap{max-width:920px;margin:0 auto;padding:12px 14px 10px;display:grid;gap:10px}
+    .header{position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:14px;background:var(--metal);border:1px solid var(--border);box-shadow:var(--shadow)}
+    .header::before{
+      content:""; position:absolute; inset:0; border-radius:14px;
+      background:
+        /* subtle diagonal stripes for arcade vibe */
+        repeating-linear-gradient(135deg, rgba(255,122,26,.10) 0 10px, rgba(255,122,26,0) 10px 20px);
+      mix-blend-mode:overlay; pointer-events:none;
+    }
+    .title{
+      display:flex; align-items:center; gap:10px;
+      font-weight:900; letter-spacing:.4px; font-size:clamp(18px,2.2vw,22px);
+      text-shadow:0 2px 6px rgba(0,0,0,.6);
+    }
+    .ribbon{
+      display:inline-flex; align-items:center; gap:6px; padding:4px 10px 4px 12px;
+      background:linear-gradient(90deg, var(--tekken), #ff9a3a);
+      color:#1a0b00; font-weight:900; border-radius:999px;
+      /* chevron tail */
+      clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 8px 50%);
+    }
+    .chev{ width:12px; height:10px; background:
+      linear-gradient(135deg,#0000 40%,#1a0b00 41% 59%,#0000 60%),
+      linear-gradient(225deg,#0000 40%,#1a0b00 41% 59%,#0000 60%);
+      opacity:.45 }
+
     .status{font-size:12px;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-    .card{border:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));border-radius:22px;padding:18px 16px;box-shadow:var(--shadow)}
-    .btn{width:100%;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;user-select:none;border-radius:18px;padding:18px 12px;border:1px solid rgba(255,255,255,.12);background:transparent;color:var(--text);transition:transform .08s,box-shadow .12s,border-color .15s}
-    .btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring)}
-    .btn:active{transform:translateY(1px) scale(.99)}
-    .btn .icon{width:22px;height:22px;opacity:.9}
-    .btn .label{font-weight:700;font-size:18px}
-    .btn .kbdrow{display:flex;gap:6px}
-    .kbd{display:inline-block;min-width:1.8em;text-align:center;padding:3px 8px;border-radius:8px;border:1px solid var(--border);background:#0e1118;color:var(--text);font-family:ui-monospace,monospace}
-    .card.blue{border-color:rgba(124,140,255,.35)}
-    .card.red{border-color:rgba(255,107,107,.35)}
-    .row{display:flex;align-items:center;gap:12px}
-    .switch{position:relative;width:48px;height:26px;border-radius:999px;background:#2a2f3f;border:1px solid var(--border)}
+
+    /* ==== GRID ==== */
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:10px}
+
+    /* ==== CARD (metal + beveled corner) ==== */
+    .card{
+      position:relative; display:flex; border:1px solid var(--border); border-radius:16px;
+      background:var(--metal); padding:8px; box-shadow:var(--shadow);
+      /* cut the top-right corner */
+      clip-path:polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+      overflow:hidden;
+    }
+    .card::after{ /* subtle scanlines overlay */
+      content:""; position:absolute; inset:0;
+      background:repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 2px, transparent 2px 4px);
+      mix-blend-mode:overlay; pointer-events:none;
+    }
+
+    /* ==== BUTTON ==== */
+    .btn{
+      position:relative; width:100%;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:8px; min-height:104px; border-radius:12px; padding:12px 10px;
+      color:#fff; cursor:pointer; user-select:none;
+      border:1px solid rgba(255,255,255,.22);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.22)),
+        radial-gradient(120% 140% at 50% 0%, rgba(255,122,26,.22), transparent 60%),
+        #10131a;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 10px 24px rgba(0,0,0,.38);
+      transition:transform .12s ease, filter .12s ease, border-color .12s ease;
+    }
+    /* arcade-style top light bar */
+    .btn::before{
+      content:""; position:absolute; top:0; left:0; right:0; height:4px; border-radius:12px 12px 0 0;
+      background:linear-gradient(90deg, var(--tekken), #ffb347);
+      box-shadow:0 0 10px rgba(255,122,26,.6), 0 0 18px rgba(255,122,26,.35) inset;
+      opacity:.8;
+    }
+    /* HEAT glow on hover/focus */
+    .btn:hover{ transform:translateY(-2px); filter:brightness(1.08) }
+    .btn:focus-visible{ outline:2px solid rgba(255,122,26,.8); outline-offset:2px }
+    .btn.heat:hover::after, .btn.heat:focus-visible::after{
+      content:""; position:absolute; inset:-2px; border-radius:14px;
+      background:radial-gradient(80% 60% at 50% -10%, rgba(255,45,45,.6), transparent 60%);
+      animation:heat 1s ease-out;
+      pointer-events:none;
+    }
+    @keyframes heat{ from{opacity:0} to{opacity:1} }
+
+    .icon{width:18px;height:18px;opacity:.95}
+    .label{
+      font-weight:900; letter-spacing:.25px;
+      font-size: clamp(15px, 1.6vw, 18px);
+      line-height:1.18; text-shadow:0 1px 2px rgba(0,0,0,.9);
+      text-wrap:balance; white-space:normal; word-break:keep-all;
+    }
+    .kbdrow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+    .kbd{
+      display:inline-block; min-width:1.8em; text-align:center; padding:4px 7px; border-radius:9px;
+      border:1px solid rgba(255,255,255,.24);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.26)),
+        /* tiny diagonal hatch on keys */
+        repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0 6px, rgba(0,0,0,.0) 6px 12px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
+      font-family:ui-monospace,monospace; font-weight:800; font-size:12px; color:#eef3ff;
+    }
+    .plus{align-self:center;opacity:.9}
+
+    /* toggle switch */
+    .row{display:flex;align-items:center;gap:10px}
+    .switch{position:relative;width:44px;height:24px;border-radius:999px;background:#0d1118;border:1px solid var(--border)}
     .switch input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
-    .switch .knob{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .18s}
-    .switch input:checked + .knob{left:24px}
-    .help{padding:10px 12px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);background:rgba(255,255,255,0.02)}
+    .switch .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .18s}
+    .switch input:checked + .knob{left:24px;background:var(--tekken)}
+    .switch-label{font-size:13px;font-weight:900;letter-spacing:.2px}
+
+    .help{color:var(--muted);font-size:12px;text-align:center;padding-top:4px}
+
+    /* compress layout for short windows so all 4 buttons always fit */
+    @media (max-height: 460px){
+      .wrap{gap:8px;padding:10px 12px 8px}
+      .grid{gap:8px}
+      .card{padding:6px;border-radius:14px}
+      .btn{min-height:92px;padding:10px;border-radius:12px}
+      .label{font-size:14px}
+      .kbd{font-size:11px;padding:3px 6px;border-radius:8px}
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="header">
-      <div class="title">FramePerfect Overlay</div>
+      <div class="title">
+        <span class="ribbon"><span class="chev"></span> FRAME PERFECT <span class="chev"></span></span>
+        <span>Overlay</span>
+      </div>
       <div class="status" id="status">Ready</div>
     </div>
 
+    <!-- 2x2 grid: always show all four buttons without scrolling -->
     <div class="grid">
-      <div class="card blue">
-        <button id="record" class="btn" aria-label="Record">
+      <div class="card">
+        <button id="record" class="btn heat" aria-label="Record">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg>
           <div class="label">Record</div>
-          <div class="kbdrow"><span class="kbd">Ctrl</span><span>+</span><span class="kbd">Shift</span><span>+</span><span class="kbd">R</span></div>
+          <div class="kbdrow"><span class="kbd">Ctrl</span><span class="plus">+</span><span class="kbd">Shift</span><span class="plus">+</span><span class="kbd">R</span></div>
         </button>
       </div>
+
       <div class="card">
-        <button id="save" class="btn" aria-label="Save Recording">
+        <button id="save" class="btn heat" aria-label="Save Recording">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="9" y="9" width="6" height="6"/></svg>
           <div class="label">Save Recording</div>
-          <div class="kbdrow"><span class="kbd">Ctrl</span><span>+</span><span class="kbd">Shift</span><span>+</span><span class="kbd">S</span></div>
+          <div class="kbdrow"><span class="kbd">Ctrl</span><span class="plus">+</span><span class="kbd">Shift</span><span class="plus">+</span><span class="kbd">S</span></div>
         </button>
       </div>
+
       <div class="card">
         <button id="import" class="btn" aria-label="Import and Play">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
           <div class="label">Import &amp; Play</div>
-          <div class="kbdrow"><span class="kbd">Ctrl</span><span>+</span><span class="kbd">Shift</span><span>+</span><span class="kbd">I</span></div>
+          <div class="kbdrow"><span class="kbd">Ctrl</span><span class="plus">+</span><span class="kbd">Shift</span><span class="plus">+</span><span class="kbd">I</span></div>
         </button>
       </div>
-      <div class="card red">
+
+      <div class="card">
         <button id="stop" class="btn" aria-label="Stop Playback">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10"/></svg>
           <div class="label">Stop Playback</div>
-          <div class="kbdrow"><span class="kbd">Ctrl</span><span>+</span><span class="kbd">Shift</span><span>+</span><span class="kbd">P</span></div>
+          <div class="kbdrow"><span class="kbd">Ctrl</span><span class="plus">+</span><span class="kbd">Shift</span><span class="plus">+</span><span class="kbd">P</span></div>
         </button>
       </div>
     </div>
@@ -78,15 +190,15 @@
         <input id="inject" type="checkbox" />
         <span class="knob"></span>
       </div>
-      <div class="label" id="injectLabel">Inject to virtual controller</div>
+      <div class="switch-label" id="injectLabel">Inject to virtual controller</div>
     </div>
 
     <div class="help">
-      Ctrl+Shift+O toggle overlay · Ctrl+Shift+R start/stop record · Ctrl+Shift+S save · Ctrl+Shift+I import · Ctrl+Shift+P play/stop · Ctrl+Shift+J toggle inject
+      Ctrl+Shift+O toggle overlay · Ctrl+Shift+R start/stop record · Ctrl+Shift+S save ·
+      Ctrl+Shift+I import · Ctrl+Shift+P play/stop · Ctrl+Shift+J toggle inject
     </div>
   </div>
 
-  <!-- CSP-safe external script -->
   <script src="launcher.js"></script>
 </body>
 </html>
