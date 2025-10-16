@@ -19,9 +19,9 @@ p,li{font-size:13px; line-height:1.45}
 .kv b{font-weight:600}
 code{background:rgba(255,255,255,.06); padding:1px 5px; border-radius:6px}
 
+/* close/help buttons */
 .btn-ghost{ pointer-events:auto; cursor:pointer; border:none; outline:none;
   padding:6px 10px; border-radius:999px; font-weight:600; color:#fff;
   background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
 .btn-ghost:hover{ background:rgba(255,255,255,.14); }
-
 .close{ margin-left:auto; width:32px; height:32px; padding:0; line-height:30px; text-align:center; font-size:18px; }

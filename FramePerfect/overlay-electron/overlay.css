@@ -4,7 +4,7 @@ html, body { margin:0; padding:0; background:transparent; }
 /* HUD row at top center */
 .stack{
   position:fixed;
-  top:12px;
+  top:16px;
   left:50%;
   transform:translateX(-50%);
   display:flex;
@@ -12,7 +12,7 @@ html, body { margin:0; padding:0; background:transparent; }
   flex-wrap:nowrap;
   align-items:center;
   pointer-events:none;
-  z-index:2; /* keep combo strip above content, below card */
+  z-index:2;
 }
 
 /* a single rendered input group (e.g., motion+buttons) */
@@ -34,11 +34,11 @@ html, body { margin:0; padding:0; background:transparent; }
 .icon{ height:26px; width:auto; image-rendering:auto; }
 .plus{ font-weight:700; opacity:.9; margin:0 2px; }
 
-/* STATUS CARD — top-right, slightly lower */
+/* STATUS CARD — top-right */
 .topbar{
   position:fixed;
-  top:72px;         /* move vertically here */
-  right:24px;       /* horizontal anchor */
+  top:64px;
+  right:24px;
   left:auto;
   transform:none;
   display:flex;
@@ -80,7 +80,7 @@ html, body { margin:0; padding:0; background:transparent; }
   100%{ transform:translateY(0) scale(1); opacity:1 }
 }
 
-/* click-through overlay is disabled only over this button via IPC */
+/* Help button */
 .topbar .btn-ghost{
   pointer-events:auto;
   cursor:pointer;
