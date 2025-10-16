@@ -9,9 +9,9 @@
 <body>
   <div class="wrap">
     <header class="bar">
-        <h1>FramePerfect HUD</h1>
-        <span class="pill ok">Help</span>
-        <button id="helpClose" class="btn-ghost close" title="Close (Esc)">×</button>
+      <h1>FramePerfect HUD</h1>
+      <span class="pill ok">Help</span>
+      <button id="helpClose" class="btn-ghost close" title="Close (Esc)">×</button>
     </header>
 
     <section>
@@ -27,7 +27,8 @@
         <li><b>Save recording</b><span>Ctrl+Shift+S</span></li>
         <li><b>Import / play</b><span>Ctrl+Shift+I / Ctrl+Shift+P</span></li>
         <li><b>Toggle injection</b><span>Ctrl+Shift+J</span></li>
-        <li><b>Open Help</b><span>Ctrl+Shift+H</span></li>
+        <li><b>Open/Close Help</b><span>Ctrl+Shift+H • Esc</span></li>
+        <li><b>Quit</b><span>Ctrl+Shift+Q</span></li>
       </ul>
     </section>
 
@@ -38,35 +39,34 @@
         <li>Perform inputs on keyboard or XInput-compatible controller.</li>
         <li>Press <b>Ctrl+Shift+S</b> to save <code>.fpkeys</code>.</li>
       </ol>
-      <p>Chord window is ~40 ms. Simultaneous buttons render as <code>12</code>, <code>23</code>, <code>123</code>, etc. Diagonals form from U/D + F/B.</p>
+      <p>Chord window ~40 ms. Buttons render as <code>12</code>, <code>23</code>, <code>123</code>. Diagonals form from U/D + F/B.</p>
     </section>
 
     <section>
       <h2>Playback</h2>
       <ol>
-        <li>Press <b>Ctrl+Shift+I</b> and select a <code>.fpkeys</code> file.</li>
-        <li>Ensure “Inject ON” in the status. Toggle with <b>Ctrl+Shift+J</b>.</li>
-        <li>Stop any time with <b>Ctrl+Shift+P</b>.</li>
+        <li><b>Ctrl+Shift+I</b> and select a <code>.fpkeys</code> file.</li>
+        <li>Ensure “Inject ON” (toggle <b>Ctrl+Shift+J</b>).</li>
+        <li>Stop with <b>Ctrl+Shift+P</b>.</li>
       </ol>
-      <p>Playback sends inputs to the virtual Xbox controller. Tekken must have focus.</p>
+      <p>Game window must be focused.</p>
     </section>
 
     <section>
       <h2>Files & Mapping</h2>
       <ul>
-        <li><code>.fpkeys</code> v2: events as <code>{t, type: 'down'|'up', key}</code> where keys are <code>W A S D J K M COMMA B V</code></li>
-        <li>UIJK → <code>1 2 3 4</code>. Motion icons: <code>u,d,f,b,uf,ub,df,db</code>.</li>
-        <li>Provider in file: <code>xinput+keyboard</code> when a pad was recorded.</li>
+        <li><code>.fpkeys</code> v2: events are <code>{ t, type:'down'|'up', key }</code> where keys are <code>W A S D J K M COMMA B V</code></li>
+        <li>UIJK → <code>1 2 3 4</code>. Motions: <code>u,d,f,b,uf,ub,df,db</code>.</li>
+        <li>Provider shows <code>xinput+keyboard</code> when a pad was recorded.</li>
       </ul>
     </section>
 
     <section>
       <h2>Troubleshooting</h2>
       <ul>
-        <li><b>“FpPad exited …”</b> — install ViGEmBus, then restart app as admin once.</li>
-        <li><b>No controller events</b> — make the device XInput (DS4Windows/Steam Input).</li>
-        <li><b>HUD cut off</b> — increase overlay window height in <code>ensureOverlay()</code>.</li>
-        <li><b>Game ignores input</b> — game window must be active; injection must be ON.</li>
+        <li><b>“FpPad exited …”</b> — install ViGEmBus; run app as admin once.</li>
+        <li><b>No pad events</b> — expose controller as XInput (DS4Windows/Steam Input).</li>
+        <li><b>HUD clipped</b> — raise overlay height in <code>ensureOverlay()</code>.</li>
       </ul>
     </section>
 
