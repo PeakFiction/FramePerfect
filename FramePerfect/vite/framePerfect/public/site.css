@@ -194,6 +194,8 @@ html::after{
 .mv-table .neg{ color:#f87171 }   /* - frames */
 .mv-table .muted{ opacity:.75 }
 
+.mv-toolbar{ position: relative; z-index: 2; }
+
 body.mv-compact .mv-table tbody td{ padding:8px 12px }
 
 /* Hide rows utility */
@@ -205,3 +207,265 @@ body.mv-compact .mv-table tbody td{ padding:8px 12px }
 .mv-card{background:#0f0f14;border:1px solid rgba(255,255,255,.08);border-radius:10px}
 .mv-input{background:#16161c;border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#fff;padding:8px 10px;min-width:220px}
 .mv-row{display:flex;flex-wrap:wrap}
+
+/* ---------- Readable font for Moves page (except character name) ---------- */
+:root{
+  --fp-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+             "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+}
+
+
+/* Apply to the Moves UI only when body has .mv-readable */
+.mv-readable .mv-toolbar,
+.mv-readable .mv-toolbar .mv-sub,
+.mv-readable .mv-controls,
+.mv-readable .mv-search input,
+.mv-readable .mv-btn,
+.mv-readable .mv-select,
+.mv-readable .mv-popover,
+.mv-readable .mv-pophead,
+.mv-readable .mv-popfoot,
+.mv-readable .mv-chips,
+.mv-readable .mv-chip span,
+.mv-readable .mv-table,
+.mv-readable .mv-table th,
+.mv-readable .mv-table td,
+.mv-readable .mv-note-box,
+.mv-readable .muted {
+  font-family: var(--fp-sans);
+  letter-spacing: .02em;
+}
+
+/* Keep the character title in display font */
+.mv-readable .mv-h1 { font-family: var(--fp-head); }
+
+/* Numbers line up better */
+.mv-readable .mv-table th,
+.mv-readable .mv-table td {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+/* Inputs/buttons feel tighter with system fonts */
+.mv-readable .mv-search input { font-size: 14px; }
+.mv-readable .mv-btn,
+.mv-readable .mv-select { font-size: 14px; }
+.mv-readable .mv-note-box { font-size: 14px; line-height: 1.35; }
+
+/* ===========================
+   MOVES PAGE — layout & theme
+   =========================== */
+
+:root{ --fp-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial; }
+.mv-toolbar, .mv-sheet, .mv-table, .mv-note-box, .mv-popover { font-family: var(--fp-ui); }
+
+.mv-stage { position: relative; }
+
+/* keep toolbar always above the glass sheet */
+.mv-toolbar.container{
+  position: relative;
+  z-index: 5;               /* ↑ higher than sheet */
+  margin-bottom: 8px;
+}
+
+/* glass panel for the table */
+.mv-sheet{
+  position: relative;
+  z-index: 2;               /* ↓ below toolbar */
+  width: min(1100px, 94vw);
+  margin: 12px auto 80px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(10,10,14,.52);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* full-body character render — centered, consistent scale */
+.mv-render{
+  position:fixed;
+  left:50%;
+  bottom:0;
+  transform:translateX(-50%);
+  height:min(86vh, 980px);  /* scale by height, not width */
+  width:auto;
+  max-width:92vw;
+  opacity:.22;
+  object-fit:contain;
+  filter:saturate(1.05) drop-shadow(0 20px 40px rgba(0,0,0,.5));
+  pointer-events:none;
+  z-index:0; /* behind toolbar/sheet */
+}
+
+
+.mv-shell{
+  position: relative;
+  z-index: 1;
+  margin: 14px auto 120px;
+  width: min(1200px, 92vw);
+}
+
+.mv-glass{
+  background: rgba(12,12,18,.62);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+
+
+/* Search */
+.mv-search{
+  display:flex; align-items:center; gap:8px; background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12); padding:8px 10px; border-radius:10px;
+}
+.mv-search svg{ width:18px; height:18px; opacity:.85; }
+.mv-search input{ all: unset; width: 38ch; font: 600 14px/1 var(--fp-ui); }
+
+/* Table — collapse to keep header/row columns perfectly aligned */
+/* True table so header aligns with body */
+.mv-table{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;      /* important: use colgroup widths */
+}
+.mv-table thead th{
+  text-align: left;
+  padding: 12px 14px;
+  font: 700 13px/1.1 "Bebas Neue", system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  letter-spacing: .06em;
+  color: #fff;
+  background: rgba(255,255,255,.05);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.mv-table tbody tr.mv-row td{
+  padding: 14px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  transition: background .15s ease;
+}
+.mv-table tbody tr.mv-row:hover td{
+  background: rgba(126, 8, 22, .18); /* Tekken dark red hover */
+}
+/* cells */
+.mv-table td.cmd .cmd-wrap strong{
+  font: 700 18px/1 "Bebas Neue", system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  letter-spacing: .04em;
+}
+.mv-table td.cmd .cmd-wrap .muted{ opacity:.75; font-size:12px; }
+
+.mv-table td.props, .mv-table td.notes{
+  font-size: 13px;
+  opacity: .95;
+}
+
+
+/* rounded “card” edges while using collapse */
+.mv-table tbody tr.mv-row td:first-child{ border-top-left-radius:12px; border-bottom-left-radius:12px; }
+.mv-table tbody tr.mv-row td:last-child { border-top-right-radius:12px; border-bottom-right-radius:12px; }
+
+/* frame coloring */
+.mv-table .pos{ color:#39d98a; font-weight:700; }
+.mv-table .neg{ color:#ff6b6b; font-weight:700; }
+.mv-table .muted{ opacity:.7; }
+
+/* command cell layout */
+.mv-cmd{ display:flex; flex-direction:column; gap:2px; }
+
+/* actions */
+.acts .acts-wrap{ display:flex; gap:8px; }
+
+/* dark always-visible note editor */
+/* Always-visible note editor (dark background) */
+.mv-note td{ padding: 0 14px 18px; background: transparent; }
+.mv-note-box{
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  padding: 12px 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.mv-note-box::placeholder{ color: rgba(255,255,255,.55); }
+.mv-note-box:focus{
+  border-color: rgba(255,64,112,.45);
+  box-shadow: 0 0 0 3px rgba(255,64,112,.22);
+  background: rgba(8,10,12,.92);
+}
+
+/* Buttons */
+.mv-btn{
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  transition: transform .06s ease, background .15s ease, border-color .15s ease;
+}
+.mv-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,64,112,.45);
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+}
+.mv-btn:active{
+  transform: translateY(0) scale(.98);
+  box-shadow: 0 4px 14px rgba(0,0,0,.35) inset;
+}
+.mv-btn.ghost{ background: transparent; border-color: rgba(255,255,255,.12); }
+.mv-btn.ghost:hover{ background: rgba(255,64,112,.10); border-color: rgba(255,64,112,.45); }
+
+/* Compact mode still supported */
+body.mv-compact .mv-table thead{ display:none; }
+body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
+
+/* ─────────────────────────────
+   PATCH: moves table alignment
+   ───────────────────────────── */
+.mv-sheet .mv-table{
+  width:100%;
+  border-collapse:collapse !important;
+  border-spacing:0 !important;
+  table-layout:fixed;
+}
+.mv-sheet .mv-table thead th{
+  position:static !important;
+  top:auto !important;
+  background:rgba(255,255,255,.05);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+
+/* Column widths (header and body sync) */
+.mv-sheet .mv-table th:nth-child(1),
+.mv-sheet .mv-table td:nth-child(1){ width:28%; }
+
+.mv-sheet .mv-table th:nth-child(2),
+.mv-sheet .mv-table td:nth-child(2){ width:9%; }
+
+.mv-sheet .mv-table th:nth-child(3),
+.mv-sheet .mv-table td:nth-child(3){ width:9%; }
+
+.mv-sheet .mv-table th:nth-child(4),
+.mv-sheet .mv-table td:nth-child(4){ width:9%; }
+
+.mv-sheet .mv-table th:nth-child(5),
+.mv-sheet .mv-table td:nth-child(5){ width:9%; }
+
+.mv-sheet .mv-table th:nth-child(6),
+.mv-sheet .mv-table td:nth-child(6){ width:18%; }
+
+.mv-sheet .mv-table th:nth-child(7),
+.mv-sheet .mv-table td:nth-child(7){ width:14%; }
+
+.mv-sheet .mv-table th:nth-child(8),
+.mv-sheet .mv-table td:nth-child(8){ width:4%; }
+

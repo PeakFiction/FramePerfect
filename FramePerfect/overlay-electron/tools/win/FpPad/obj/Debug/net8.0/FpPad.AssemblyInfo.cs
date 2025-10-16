@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FpPad")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cfe0943598f2779f068efce552039ce205361ec6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e0b89c86fdc435c68421773e50832869e9515d9e")]
 [assembly: System.Reflection.AssemblyProductAttribute("FpPad")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FpPad")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -4,7 +4,7 @@ import Moves from "./pages/Moves";
 import Playlist from "./pages/Playlist";
 import Calculator from "./pages/Calculator";
 import ComboMaker from "./pages/ComboMaker";
-/* comment */
+
 function Nav() {
   const loc = useLocation();
   const active = (to) => (loc.pathname === to ? "active" : undefined);
