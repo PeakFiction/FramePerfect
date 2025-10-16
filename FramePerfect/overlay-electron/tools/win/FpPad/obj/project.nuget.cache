@@ -1,13 +1,17 @@
 {
   "version": 2,
-  "dgSpecHash": "TBCaCX3fe5Q=",
+  "dgSpecHash": "o9Esz8551YE=",
   "success": true,
   "projectFilePath": "C:\\Users\\Muhammad Sakhran\\Documents\\UQ\\Social and Mobile Computing\\FramePerfect\\FramePerfect\\overlay-electron\\tools\\win\\FpPad\\FpPad.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.20\\microsoft.net.illink.tasks.8.0.20.nupkg.sha512",
     "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\nefarius.vigem.client\\1.21.256\\nefarius.vigem.client.1.21.256.nupkg.sha512",
     "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.20\\microsoft.netcore.app.ref.8.0.20.nupkg.sha512",
+    "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.20\\microsoft.netcore.app.runtime.win-x64.8.0.20.nupkg.sha512",
     "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.20\\microsoft.windowsdesktop.app.ref.8.0.20.nupkg.sha512",
+    "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.20\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.20.nupkg.sha512",
     "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.20\\microsoft.aspnetcore.app.ref.8.0.20.nupkg.sha512",
+    "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.20\\microsoft.aspnetcore.app.runtime.win-x64.8.0.20.nupkg.sha512",
     "C:\\Users\\Muhammad Sakhran\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.20\\microsoft.netcore.app.host.win-x64.8.0.20.nupkg.sha512"
   ],
   "logs": []

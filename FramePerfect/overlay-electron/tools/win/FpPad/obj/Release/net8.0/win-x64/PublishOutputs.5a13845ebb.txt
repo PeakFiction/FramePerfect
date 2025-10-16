@@ -1,0 +1,2 @@
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpPad\bin\Release\net8.0\win-x64\publish\FpPad.pdb
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpPad\bin\Release\net8.0\win-x64\publish\FpPad.exe

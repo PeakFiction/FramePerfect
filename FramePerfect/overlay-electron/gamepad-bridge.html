@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Gamepad Bridge</title>
+  <style>
+    body { margin:0; font:12px system-ui; color:#bbb; background:#111; }
+    .hint { padding:6px 8px; }
+  </style>
+</head>
+<body>
+  <div class="hint">Gamepad bridge running… Press any controller button once to activate.</div>
+  <script>
+    // Poll Gamepad API and emit button edge events to main via preload.
+    const prev = new Map(); // index -> { buttons:[], axes:[], ts }
+    const DEAD = 0.35;      // analog-to-dpad threshold
+
+    function emit(payload){
+      if (window.gp && typeof window.gp.emit === 'function') window.gp.emit(payload);
+    }
+
+    function scan(){
+      const list = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (const gp of list){
+        if (!gp) continue;
+        const key = gp.index;
+        const last = prev.get(key) || { buttons: [], axes: [], ts: 0 };
+
+        const curButtons = (gp.buttons || []).map(b => !!b && b.pressed);
+
+        // 1) physical buttons (edge detection)
+        for (let i = 0; i < curButtons.length; i++){
+          const now = !!curButtons[i];
+          const was = !!last.buttons[i];
+          if (now !== was){
+            emit({ t: performance.now(), kind:'button', index:i, pressed: now, id: gp.id, gpIndex: gp.index });
+          }
+        }
+
+        // 2) left stick -> virtual dpad
+        const ax = gp.axes || [];
+        const leftX = ax[0] ?? 0;
+        const leftY = ax[1] ?? 0;
+        const v = {
+          12: (leftY < -DEAD), // up
+          13: (leftY >  DEAD), // down
+          14: (leftX < -DEAD), // left
+          15: (leftX >  DEAD), // right
+        };
+        for (const idx of [12,13,14,15]){
+          const now = v[idx];
+          const storeKey = `v${idx}`;
+          const was = !!last[storeKey];
+          if (now !== was){
+            emit({ t: performance.now(), kind:'button', index: idx, pressed: now, id: gp.id, gpIndex: gp.index, virtual:true });
+          }
+          last[storeKey] = now;
+        }
+
+        last.buttons = curButtons;
+        last.axes = ax.slice(0);
+        last.ts = performance.now();
+        prev.set(key, last);
+      }
+    }
+
+    // Use setInterval (not rAF) so it keeps running even if hidden/minimized.
+    setInterval(scan, 16); // ~60 Hz
+  </script>
+</body>
+</html>
+

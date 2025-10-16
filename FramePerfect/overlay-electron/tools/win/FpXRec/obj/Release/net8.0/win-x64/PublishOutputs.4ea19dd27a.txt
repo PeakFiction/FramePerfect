@@ -1,0 +1,2 @@
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\win-x64\publish\FpXRec.pdb
+C:\Users\Muhammad Sakhran\Documents\UQ\Social and Mobile Computing\FramePerfect\FramePerfect\overlay-electron\tools\win\FpXRec\bin\Release\net8.0\win-x64\publish\FpXRec.exe
