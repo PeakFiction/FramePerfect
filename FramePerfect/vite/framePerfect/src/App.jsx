@@ -1,30 +1,39 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import CharacterSelect from './pages/CharacterSelect.jsx';
+import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from "react-router-dom";
+import CharacterSelect from "./pages/CharacterSelect";
+import Moves from "./pages/Moves";
+import Playlist from "./pages/Playlist";
+import Calculator from "./pages/Calculator";
+import ComboMaker from "./pages/ComboMaker";
 
-import ComboMaker from './pages/ComboMaker.jsx';   // builder ikon (baru)
-import Moves from './pages/Moves.jsx';
-import Calculator from './pages/Calculator.jsx';
-import Playlist from './pages/Playlist.jsx';
+function Nav() {
+  const loc = useLocation();
+  const active = (to) => (loc.pathname === to ? "active" : undefined);
+  return (
+    <nav className="nav">
+      <div className="container nav-inner">
+        <div className="brand">FRAME<span>PERFECT</span></div>
+        <div className="menu">
+          <Link className={active("/")} to="/">Fighters</Link>
+          <Link className={active("/calculator")} to="/calculator">Damage</Link>
+          <Link className={active("/combomaker")} to="/combomaker">Combo Maker</Link>
+          <Link className={active("/playlist")} to="/playlist">Playlist</Link>
+        </div>
+      </div>
+    </nav>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <nav className="nav">
-        <Link to="/">Characters</Link>
-        <Link to="/combo">Combo Maker</Link>
-        <Link to="/calculator">Calculator</Link>
-      </nav>
-
+      <Nav />
       <Routes>
         <Route path="/" element={<CharacterSelect />} />
         <Route path="/moves" element={<Moves />} />
-        <Route path="/moves/:char" element={<Moves />} />
-        <Route path="/playlist" element={<Playlist />} /> 
-
-        <Route path="/combo" element={<ComboMaker />} />
-        <Route path="/combo/:char" element={<ComboMaker />} />
-
+        <Route path="/playlist" element={<Playlist />} />
         <Route path="/calculator" element={<Calculator />} />
+        <Route path="/combomaker" element={<ComboMaker />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
