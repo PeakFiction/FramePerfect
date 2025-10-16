@@ -1,85 +1,89 @@
 // src/pages/ComboMaker.jsx
-import { useExportData } from '../data/useData.js';
-import { useSearchParams } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
-
-const norm = v => (v ?? '').toString().trim().toLowerCase();
+import { useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
+import { ICONS, parseNotation } from "../lib/notation.js";
 
 export default function ComboMaker() {
-  const data = useExportData();
-  const [params] = useSearchParams();
-  const [favs, setFavs] = useState(() => new Set(JSON.parse(localStorage.getItem('fp_favorites') || '[]')));
-  const [notes, setNotes] = useState(() => JSON.parse(localStorage.getItem('fp_notes') || '{}'));
+  const [tokens, setTokens] = useState([]);
+  const [text, setText] = useState("");
+  const canvasRef = useRef(null);
 
-  const charName = params.get('char') || '';
-  const character = useMemo(() => {
-    if (!data) return null;
-    return (data.characters || []).find(c => (c.name || c.characterName) === charName) || null;
-  }, [data, charName]);
+  function add(t) { setTokens((a) => [...a, t]); }
+  function backspace() { setTokens((a) => a.slice(0, -1)); }
+  function clearAll() { setTokens([]); }
+  function fromText() { setTokens(parseNotation(text)); }
 
-  const cid = norm(character?.characterID || '');
-  const moves = useMemo(() => {
-    if (!data || !cid) return [];
-    const list = (data.moves || []).filter(m => norm(m.characterID) === cid);
-    // stable sort optional: by notation, then startup
-    list.sort((a,b) => (a.notation||'').localeCompare(b.notation||'') || (a.startupFrames||'').localeCompare(b.startupFrames||''));
-    return list;
-  }, [data, cid]);
+  async function exportPng() {
+    if (!canvasRef.current) return;
+    const url = await toPng(canvasRef.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
+    const a = document.createElement("a");
+    a.href = url; a.download = "combo.png"; a.click();
+  }
 
-  const isFavorite = (id) => favs.has(id);
-  const toggleFavorite = (id) => {
-    const next = new Set(favs);
-    next.has(id) ? next.delete(id) : next.add(id);
-    setFavs(next);
-    localStorage.setItem('fp_favorites', JSON.stringify([...next]));
-  };
-
-  const getNote = (id) => notes[id] || '';
-  const setNote = (id, text) => {
-    const next = { ...notes };
-    if (!text) delete next[id]; else next[id] = text;
-    setNotes(next);
-    localStorage.setItem('fp_notes', JSON.stringify(next));
-  };
+  const iconKeys = useMemo(() => Object.keys(ICONS), []);
 
   return (
-    <div className="page">
-      <h1>{charName}</h1>
-      <ul className="list">
-        {moves.map((m) => {
-          const id = String(m.moveID ?? `${m.notation}-${m.startupFrames}-${m.damage}`);
-          const label = m.moveName || m.notation || `Move ${id}`;
-          const meta = {
-            Notation: m.notation,
-            Startup: m.startupFrames,
-            'On Hit': m.framesOnHit,
-            'On Block': m.framesOnBlock,
-            'On CH': m.framesOnCounter,
-            Properties: m.stringProperties,
-            Damage: m.damage,
-          };
-          return (
-            <li key={id} className="item">
-              <div className="row">
-                <div className="col">
-                  <div className="title">{label}</div>
-                  <div className="meta">
-                    {Object.entries(meta).map(([k,v]) =>
-                      v ? <span key={k} className="pill"><strong>{k}:</strong> {v}</span> : null
-                    )}
-                  </div>
-                </div>
-                <button className="fav" onClick={() => toggleFavorite(id)}>{isFavorite(id) ? '★' : '☆'}</button>
-              </div>
-              <textarea
-                placeholder="Add note…"
-                defaultValue={getNote(id)}
-                onBlur={(e) => setNote(id, e.target.value)}
-              />
-            </li>
-          );
-        })}
-      </ul>
+    <div className="page" style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>Combo Maker</h1>
+
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+        <input
+          style={{ border: "1px solid #ddd", borderRadius: 8, padding: "10px 12px", width: 420, fontFamily: "monospace" }}
+          placeholder="Type Tekken notation, e.g. df+2, 1, 2, f,f+4"
+          value={text} onChange={(e)=>setText(e.target.value)}
+          onKeyDown={(e)=>{ if(e.key==="Enter") fromText(); }}
+        />
+        <button onClick={fromText} className="btn">Convert</button>
+        <button onClick={backspace} className="btn">⌫</button>
+        <button onClick={clearAll} className="btn">Clear</button>
+        <button onClick={exportPng} className="btn">Export PNG</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {iconKeys.map(k => (
+          <button key={k} onClick={() => add(k)} className="chip">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <img src={`/icons/${ICONS[k]}`} alt={k} height={18} />
+              <small style={{ opacity: .6 }}>{k}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div
+        ref={canvasRef}
+        style={{
+          border: "1px solid #e5e5e5",
+          borderRadius: 12,
+          background: "#fff",
+          padding: 16,
+          minHeight: 96,
+          maxWidth: 960
+        }}
+      >
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          {tokens.length === 0 ? (
+            <span style={{ color: "#aaa" }}>Your combo will appear here…</span>
+          ) : tokens.map((t, i) => {
+              const src = ICONS[t];
+              if (src) return <img key={i} src={`/icons/${src}`} alt={t} height={32} />;
+              // fallback kalau tak ada icon: tulis teksnya biar tetap terlihat
+              return <span key={i} style={{ fontFamily: "monospace" }}>{t}</span>;
+            })
+          }
+        </div>
+      </div>
+
+      <style>{`
+        .btn {
+          border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; background: #fff; cursor: pointer;
+        }
+        .btn:hover { background: #f8f8f8; }
+        .chip {
+          border: 1px solid #eee; border-radius: 8px; padding: 6px 10px; background:#fff; cursor:pointer;
+        }
+        .chip:hover { background:#f9f9f9; }
+      `}</style>
     </div>
   );
 }

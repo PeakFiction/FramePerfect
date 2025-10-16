@@ -1,0 +1,30 @@
+{
+  "name": "frameperfect-overlay",
+  "version": "0.2.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "electron": "30.x",
+    "node-global-key-listener": "0.3.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.frameperfect.overlay",
+    "fileAssociations": [
+      { "ext": "fpkeys", "name": "FramePerfect Keystrokes", "mimeType": "application/x-frameperfect-keys" }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "protocols": [{ "name": "FramePerfect", "schemes": ["frameperfect"] }]
+    },
+    "win": {
+      "protocols": [{ "name": "FramePerfect", "schemes": ["frameperfect"] }]
+    }
+  }
+}

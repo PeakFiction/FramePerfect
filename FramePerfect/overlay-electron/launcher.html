@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FramePerfect Overlay</title>
+  <style>
+    body { margin:0; font:14px system-ui,-apple-system,Segoe UI,Arial; }
+    .wrap { padding:20px; display:grid; gap:16px; }
+    .row { display:flex; gap:12px; align-items:center; }
+    .btn { padding:10px 12px; border:1px solid #222; border-radius:10px; cursor:pointer; background:#111; color:#fff; }
+    .hint { font-size:12px; color:#555; }
+    .kbd { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <button class="btn" id="record">Record</button>
+      <button class="btn" id="save">Save Recording</button>
+      <button class="btn" id="import">Import &amp; Play</button>
+      <button class="btn" id="stop">Stop Playback</button>
+    </div>
+    <div class="row">
+      <label><input id="inject" type="checkbox" checked> Inject to virtual controller</label>
+    </div>
+    <div class="hint">
+      Ctrl+Shift+O toggle overlay · Ctrl+Shift+R start/stop record · Ctrl+Shift+S save · Ctrl+Shift+I import · Ctrl+Shift+P play/stop · Ctrl+Shift+J toggle inject
+    </div>
+  </div>
+  <script>
+    record.onclick = () => window.api.recordStart();
+    save.onclick   = () => window.api.recordStopAndSave();
+    import.onclick = () => window.api.importChooseAndPlay();
+    stop.onclick   = () => window.api.playbackStop();
+    inject.onchange = (e) => window.api.injectSet(e.target.checked);
+  </script>
+</body>
+</html>
