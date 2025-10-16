@@ -15,4 +15,11 @@ contextBridge.exposeInMainWorld('api', {
 
   // Capability hint for launcher (Windows-only inject)
   onLauncherInit: (cb) => ipcRenderer.on('launcher:init', (_, p) => cb(p)),
+  
+  openHelp: () => ipcRenderer.send('help:open'),
+  setOverlayPassthrough: (on) => ipcRenderer.send('overlay:passthrough', !!on),
+  closeHelp: () => ipcRenderer.send('help:close'),
+
+
 });
+

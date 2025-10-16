@@ -1,8 +1,9 @@
 // overlay-electron/main.js
-const { app, BrowserWindow, globalShortcut, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, dialog, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+
 
 let overlayWin = null;
 let launcherWin = null;
@@ -121,15 +122,35 @@ function setStatus(obj) {
   w.webContents.send('status', { ...obj, mode, provider: providerName });
 }
 
-// ---------- windows ----------
 function ensureOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
+
+  const { width } = require('electron').screen.getPrimaryDisplay().workAreaSize;
+  const W = 900;
+  const H = 168;            // was ~96; make room for stack + topbar
+  const X = Math.max(0, Math.round((width - W) / 2));
+  const Y = 0;
+
   overlayWin = new BrowserWindow({
-    width: 900, height: 160, x: 100, y: 80,
-    transparent: true, frame: false, resizable: false,
-    alwaysOnTop: true, focusable: false, fullscreenable: false,
-    skipTaskbar: true, hasShadow: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    width: W,
+    height: H,
+    x: X,
+    y: Y,
+    useContentSize: true,   // measure size by web content only
+    transparent: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    focusable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
   });
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
@@ -137,6 +158,30 @@ function ensureOverlay() {
   overlayWin.loadFile(path.join(__dirname, 'overlay.html'));
   return overlayWin;
 }
+
+ipcMain.on('help:open', () => { ensureHelp(); });
+ipcMain.on('overlay:passthrough', (_e, on) => {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  overlayWin.setIgnoreMouseEvents(!!on, { forward: true });
+});
+
+let helpWin = null;
+function ensureHelp() {
+  if (helpWin && !helpWin.isDestroyed()) { helpWin.show(); return helpWin; }
+  helpWin = new BrowserWindow({
+    width: 760, height: 600,
+    resizable: true, minimizable: false, maximizable: false,
+    title: 'Help — FramePerfect HUD',
+    transparent: true, frame: false, // glassy look consistent with overlay
+    alwaysOnTop: false,              // normal window
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+  });
+  helpWin.loadFile(path.join(__dirname, 'help.html'));
+  helpWin.on('closed', () => { helpWin = null; });
+  return helpWin;
+}
+
+
 
 function ensureLauncher() {
   if (launcherWin && !launcherWin.isDestroyed()) return launcherWin;
@@ -396,6 +441,8 @@ function wireIPC() {
   ipcMain.on('import:chooseAndPlay',() => { chooseAndPlay(); });
   ipcMain.on('playback:stop',       () => { stopPlayback(); });
   ipcMain.on('inject:set', (_e, v)  => { injectEnabled = !!v; setStatus({ ok:true, message:`Inject ${injectEnabled?'ON' : 'OFF'}` }); });
+  ipcMain.on('help:open',  () => { showHelp(); });
+  ipcMain.on('help:close', () => { hideHelp(); });
 }
 
 function wireShortcuts() {
@@ -413,6 +460,28 @@ function wireShortcuts() {
     injectEnabled = !injectEnabled;
     setStatus({ ok:true, message:`Inject ${injectEnabled?'ON':'OFF'}` });
   });
+  globalShortcut.register('CommandOrControl+Shift+H', () => { ensureHelp(); });
+  globalShortcut.register('CommandOrControl+Shift+H', () => { toggleHelp(); });
+}
+
+function showHelp() {
+  if (helpWin && !helpWin.isDestroyed()) { helpWin.show(); helpWin.focus(); return; }
+  helpWin = new BrowserWindow({
+    width: 760, height: 600,
+    resizable: true, minimizable: false, maximizable: false,
+    title: 'Help — FramePerfect HUD',
+    transparent: true, frame: false,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+  });
+  helpWin.loadFile(path.join(__dirname, 'help.html'));
+  helpWin.on('closed', () => { helpWin = null; });
+}
+function hideHelp() {
+  if (helpWin && !helpWin.isDestroyed()) helpWin.close(); // or helpWin.hide() if you prefer
+}
+function toggleHelp() {
+  if (helpWin && !helpWin.isDestroyed() && helpWin.isVisible()) hideHelp();
+  else showHelp();
 }
 
 // ---------- boot ----------
