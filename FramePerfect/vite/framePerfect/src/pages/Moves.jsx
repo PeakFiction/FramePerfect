@@ -255,6 +255,8 @@ export default function Moves() {
               <col style={{width: "14%"}} />  {/* actions */}
             </colgroup>
 
+            
+
             <thead>
               <tr>
                 <th>COMMAND</th>

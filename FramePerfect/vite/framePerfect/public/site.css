@@ -3,6 +3,8 @@
   --fp-head: "Bebas Neue", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
   --frameInset: 10px;    /* inner frame inset from card edge */
   --pop: 22px;           /* portrait rise above inner frame */
+  --mv-sticky-top: 124px
+  --mv-head-gap: 50px; 
 }
 
 /* ===== Reset / Base ===== */
@@ -174,12 +176,32 @@ html::after{
 
 /* Table */
 .mv-table{ width:100%; border-collapse:separate; border-spacing:0 10px; margin:12px auto 80px }
-.mv-table thead th{
-  position:sticky; top:calc(64px + 68px); /* nav + toolbar */
-  background:rgba(10,10,14,.85); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  padding:12px 14px; text-align:left; border-bottom:1px solid rgba(255,255,255,.12);
-  font:700 14px/1 var(--fp-head); letter-spacing:.06em;
+/* Header sticks just below the nav+toolbar */
+/* Make THEAD sticky; TH stick at top of the header row */
+.mv-table thead{
+  position: sticky;
+  top: var(--mv-sticky-top);
+  z-index: 100;                     /* above rows */
+  background: rgba(10,10,14,.90);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+.mv-table thead th{
+  position: sticky;
+  top: 0;                           /* thead already has the offset */
+  z-index: 101;
+  padding:12px 14px;
+  text-align:left;
+  border-bottom:1px solid rgba(255,255,255,.10);
+  font:700 14px/1 var(--fp-head);
+  letter-spacing:.06em;
+  vertical-align: middle;
+}
+
+.mv-table tbody tr:first-of-type td{
+  padding-top: calc(14px + var(--mv-head-gap));   /* 14px = your normal cell padding */
+}
+
 .mv-table tbody tr{
   background:linear-gradient(180deg, rgba(18,18,24,.92), rgba(12,12,18,.92));
   border:1px solid rgba(255,255,255,.10); border-radius:12px; overflow:hidden;
@@ -194,7 +216,6 @@ html::after{
 .mv-table .neg{ color:#f87171 }   /* - frames */
 .mv-table .muted{ opacity:.75 }
 
-.mv-toolbar{ position: relative; z-index: 2; }
 
 body.mv-compact .mv-table tbody td{ padding:8px 12px }
 
@@ -263,8 +284,9 @@ body.mv-compact .mv-table tbody td{ padding:8px 12px }
 
 /* keep toolbar always above the glass sheet */
 .mv-toolbar.container{
-  position: relative;
-  z-index: 5;               /* ↑ higher than sheet */
+  position: sticky;
+  top: 64px;
+  z-index: 40;
   margin-bottom: 8px;
 }
 
@@ -354,11 +376,28 @@ body.mv-compact .mv-table tbody td{ padding:8px 12px }
   background: rgba(126, 8, 22, .18); /* Tekken dark red hover */
 }
 /* cells */
-.mv-table td.cmd .cmd-wrap strong{
-  font: 700 18px/1 "Bebas Neue", system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-  letter-spacing: .04em;
+/* Command + name alignment */
+.mv-table td.cmd .cmd-wrap{
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;                 /* allow ellipsis */
 }
-.mv-table td.cmd .cmd-wrap .muted{ opacity:.75; font-size:12px; }
+
+.mv-table td.cmd .cmd-wrap strong{
+  font: 700 20px/1 "Bebas Neue", var(--fp-head);
+  letter-spacing: .03em;
+}
+
+.mv-table td.cmd .cmd-wrap .muted{
+  font: 12px/1.2 var(--fp-ui);
+  opacity: .80;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 24ch;              /* keep the row tight */
+}
+
 
 .mv-table td.props, .mv-table td.notes{
   font-size: 13px;
@@ -431,18 +470,51 @@ body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
 /* ─────────────────────────────
    PATCH: moves table alignment
    ───────────────────────────── */
+
+/* Sticky header that sits just under the toolbar */
+.mv-sheet .mv-table thead{
+  position: sticky;
+  top: var(--mv-sticky-top);   /* uses your 124px knob */
+  z-index: 50;
+}
+
+.mv-sheet .mv-table thead th{
+  position: sticky;            /* keeps borders aligned in Chrome/Safari */
+  top: 0;                      /* the thead already has the offset */
+  z-index: 51;
+  background: rgba(10,10,14,.90);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
 .mv-sheet .mv-table{
   width:100%;
   border-collapse:collapse !important;
   border-spacing:0 !important;
   table-layout:fixed;
 }
-.mv-sheet .mv-table thead th{
-  position:static !important;
-  top:auto !important;
-  background:rgba(255,255,255,.05);
-  border-bottom:1px solid rgba(255,255,255,.08);
+/* sticky header that follows the scroll, below the toolbar */
+/* Stick the entire header row; th stay at top:0 inside it */
+.mv-sheet .mv-table thead{
+  position: sticky;
+  top: var(--mv-sticky-top);
+  z-index: 30;
+  background: rgba(10,10,14,.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+
+.mv-sheet .mv-table thead th{
+  position: sticky;   /* keeps column borders aligned in Chrome */
+  top: 0;             /* no extra offset because the thead is already sticky */
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+/* ensure header paints above body rows initially */
+/* don't constrain sticky inside the sheet */
+.mv-sheet{ overflow: visible; }
+
 
 /* Column widths (header and body sync) */
 .mv-sheet .mv-table th:nth-child(1),
@@ -469,3 +541,27 @@ body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
 .mv-sheet .mv-table th:nth-child(8),
 .mv-sheet .mv-table td:nth-child(8){ width:4%; }
 
+/* --- hard reset: keep rows as real table rows so columns align --- */
+.mv-table{ display:table; width:100%; table-layout:fixed; }
+.mv-table thead{ display:table-header-group; }
+.mv-table tbody{ display:table-row-group; }
+.mv-table tr{ display:table-row !important; }               /* guard vs flex/block overrides */
+.mv-table th,
+.mv-table td{ display:table-cell !important; vertical-align:top; }
+
+/* command cell: main notation then smaller move name */
+.mv-sheet .mv-table td:nth-child(1){ line-height: 1.05; }
+.mv-sheet .mv-table td:nth-child(1) strong{
+  display:block;
+  font:700 18px/1 "Bebas Neue", var(--fp-head);
+  letter-spacing:.02em;
+  margin-bottom:2px;
+}
+.mv-sheet .mv-table td:nth-child(1) .muted{
+  display:block;
+  font:12px/1.2 var(--fp-ui);
+  opacity:.75;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
