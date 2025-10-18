@@ -10,7 +10,7 @@
 /* ===== Reset / Base ===== */
 *{ box-sizing:border-box }
 html,body{ height:100%; margin:0; color:#fff }
-body{ font-family:var(--fp-head); background:#000 }
+body{ font-family:var(--fp-sans); background:#000 }
 
 /* ===== Full-page background ===== */
 html::before{
@@ -144,11 +144,12 @@ html::after{
 .mv-btn.ghost{
   background:transparent; border:1px solid rgba(255,255,255,.14); color:#fff;
 }
-.mv-link{ background:none; border:0; color:#ff2e84; font:700 14px/1 var(--fp-head); cursor:pointer }
+.mv-link{ background:none; border:0; color:#ff2e84; font:700 14px/1 var(--fp-sans); cursor:pointer }
 
 .mv-select{
   appearance:none; background:#0e0e12; color:#fff; border:1px solid rgba(255,255,255,.14);
   padding:10px 14px; border-radius:10px; font:700 14px/1 var(--fp-head); letter-spacing:.06em;
+  font:700 14px/1 var(--fp-sans);
 }
 
 .mv-search{
@@ -158,8 +159,9 @@ html::after{
 .mv-search svg{ width:18px; height:18px; fill:#aaa }
 .mv-search input{
   flex:1; background:transparent; border:0; outline:0; color:#fff;
-  font:700 14px/1 var(--fp-head); letter-spacing:.02em; padding:8px 4px;
+  font:600 14px/1 var(--fp-sans); letter-spacing:.02em; padding:8px 4px;
 }
+
 
 /* Popover for filters */
 .mv-popover{
@@ -208,7 +210,7 @@ html::after{
 }
 .mv-table tbody td{
   padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06);
-  font:700 14px/1.2 var(--fp-head); letter-spacing:.02em;
+  font:600 14px/1.25 var(--fp-sans); letter-spacing:.02em;
 }
 .mv-table tbody tr td:first-child{ border-top-left-radius:12px; border-bottom-left-radius:12px }
 .mv-table tbody tr td:last-child{ border-top-right-radius:12px; border-bottom-right-radius:12px; border-right:0 }
@@ -305,22 +307,144 @@ body.mv-compact .mv-table tbody td{ padding:8px 12px }
   -webkit-backdrop-filter: blur(6px);
 }
 
-/* full-body character render — centered, consistent scale */
-.mv-render{
-  position:fixed;
-  left:50%;
-  bottom:0;
-  transform:translateX(-50%);
-  height:min(86vh, 980px);  /* scale by height, not width */
-  width:auto;
-  max-width:92vw;
-  opacity:.22;
-  object-fit:contain;
-  filter:saturate(1.05) drop-shadow(0 20px 40px rgba(0,0,0,.5));
-  pointer-events:none;
-  z-index:0; /* behind toolbar/sheet */
+:root{
+  --mv-render-left: -14vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+  --mv-render-opacity: .20;
 }
 
+/* full-body character render — centered, consistent scale */
+/* Full-body character render — left side & zoomed-in */
+/* Full-body character render — farther left & closer */
+.mv-render{
+  position: fixed;
+  left: var(--mv-render-left);
+  bottom: var(--mv-render-bottom);
+  transform: scale(var(--mv-render-scale));
+  transform-origin: left bottom;
+  height: min(92vh, 1200px);
+  width: auto;
+  max-width: none;
+  opacity: var(--mv-render-opacity);
+  object-fit: contain;
+  filter: saturate(1.05) drop-shadow(0 20px 40px rgba(0,0,0,.5));
+  pointer-events: none;
+  z-index: 0;
+}
+
+@media (max-width: 1200px){
+  .mv-render{ left: -10vw; bottom: -4vh; transform: scale(1.32); }
+}
+@media (max-width: 900px){
+  .mv-render{ left: -6vw; bottom: -2vh; transform: scale(1.10); opacity: .16; }
+}
+
+/* EDDY — too left → move slightly right */
+body[data-char="eddy"],
+body[data-char="eddy-gordo"]{
+  --mv-render-left: -8vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.50;
+}
+
+/* DEVIL JIN — not left enough */
+body[data-char="devil-jin"],
+body[data-char="deviljin"]{
+  --mv-render-left: -22vw;
+  --mv-render-bottom: -52vh;
+  --mv-render-scale: 1.60;
+}
+
+/* CLIVE — not left enough */
+body[data-char="clive"]{
+  --mv-render-left: -20vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+}
+
+/* CLAUDIO — not left enough */
+body[data-char="claudio"],
+body[data-char="claudio-serafino"]{
+  --mv-render-left: -20vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+}
+
+/* HWOARANG — not left enough */
+body[data-char="hwoarang"]{
+  --mv-render-left: -20vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+}
+
+/* JACK — not left enough */
+body[data-char="jack-8"],
+body[data-char="jack8"]{
+  --mv-render-left: -22vw;
+  --mv-render-bottom: -54vh;
+  --mv-render-scale: 1.62;
+}
+
+/* KAZUYA — not left enough */
+body[data-char="kazuya"],
+body[data-char="kazuya-mishima"]{
+  --mv-render-left: -22vw;
+  --mv-render-bottom: -52vh;
+  --mv-render-scale: 1.60;
+}
+
+/* KING — not left enough */
+body[data-char="king"]{
+  --mv-render-left: -22vw;
+  --mv-render-bottom: -54vh;
+  --mv-render-scale: 1.60;
+}
+
+/* LEE — not left enough */
+body[data-char="lee"],
+body[data-char="lee-chaolan"]{
+  --mv-render-left: -20vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+}
+
+/* PANDA — not left enough (wider body, tiny extra scale) */
+body[data-char="panda"]{
+  --mv-render-left: -24vw;
+  --mv-render-bottom: -56vh;
+  --mv-render-scale: 1.65;
+}
+
+/* LIDIA — not left enough */
+body[data-char="lidia"],
+body[data-char="lidia-sobieska"]{
+  --mv-render-left: -20vw;
+  --mv-render-bottom: -50vh;
+  --mv-render-scale: 1.55;
+}
+
+/* XIAOYU — too right → push further left */
+body[data-char="xiaoyu"],
+body[data-char="ling-xiaoyu"]{
+  --mv-render-left: 0vw;
+  --mv-render-bottom: -52vh;
+  --mv-render-scale: 1.58;
+}
+
+/* YOSHIMITSU — not left enough */
+body[data-char="yoshimitsu"]{
+  --mv-render-left: -22vw;
+  --mv-render-bottom: -52vh;
+  --mv-render-scale: 1.58;
+}
+
+/* ZAFINA — not left enough */
+body[data-char="zafina"]{
+  --mv-render-left: -5vw;
+  --mv-render-bottom: -52vh;
+  --mv-render-scale: 1.58;
+}
 
 .mv-shell{
   position: relative;
@@ -450,6 +574,7 @@ body.mv-compact .mv-table tbody td{ padding:8px 12px }
   background: rgba(255,255,255,.06);
   color: #fff;
   transition: transform .06s ease, background .15s ease, border-color .15s ease;
+  font:700 14px/1 var(--fp-sans);
 }
 .mv-btn:hover{
   transform: translateY(-1px);

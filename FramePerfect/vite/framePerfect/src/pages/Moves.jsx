@@ -117,46 +117,65 @@ export default function Moves() {
     return out;
   }, [sourceMoves, qd, selectedTokens, sort]);
 
-  // ----- choose render from /public/characterRenders -----
-  const [renderUrl, setRenderUrl] = useState("");
+// ----- choose render from /public/characterRenders -----
+const [renderUrl, setRenderUrl] = useState("");
 
-  useEffect(() => {
-    let live = true;
-    if (!character) { setRenderUrl(''); return; }
+useEffect(() => {
+  let live = true;
+  if (!character) { setRenderUrl(""); return; }
 
-    const slug = slugify(character.slug || character.name || '');
+  const slug = slugify(character.slug || character.name || "");
+  // only use an alias when the actual file name differs from the slug
+  const RENDER_ALIAS = {
+    "devil-jin": "deviljin",
+    "armor-king": "armorking",
+    "jack-8": "jack8",
+    "lee": "lee",
+    "lidia": "lidia",
+    "hwoarang": "hwoarang",
+    "heihachi": "heihachi",
+    "fahkumram": "fahkumram",
+  };
+  const base = RENDER_ALIAS[slug] || slug;
 
-    // filenames in /public/characterRenders can differ from slugs
-    const RENDER_ALIAS = {
-      'devil-jin': 'deviljin',
-      'armor-king': 'armorking',
-      'jack-8': 'jack8',
-      // add more aliases only if your file name differs from the slug
-      // e.g. 'lee-chaolan': 'lee'
-    };
+  // Try WEBP first, then PNG
+  const candidates = [
+    `/characterRenders/${base}_render_transparent.webp`,
+    `/characterRenders/${base}_render_transparent.png`,
+    `/characterRenders/${base}.webp`,
+    `/characterRenders/${base}.png`,
+  ];
 
-    const base = RENDER_ALIAS[slug] || slug;
+  const tryLoad = (url) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(url);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
 
-    const candidates = [
-      `/characterRenders/${base}_render_transparent.png`,
-      `/characterRenders/${base}_render_transparent.webp`,
-      `/characterRenders/${base}.png`,
-      `/characterRenders/${base}.webp`,
-    ];
+  (async () => {
+    for (const url of candidates) {
+      const ok = await tryLoad(url);
+      if (!live) return;
+      if (ok) { setRenderUrl(ok); return; }
+    }
+    setRenderUrl(""); // hide if nothing found
+  })();
 
-    (async () => {
-      for (const p of candidates) {
-        try {
-          const r = await fetch(p, { method: 'HEAD' });
-          if (!live) return;
-          if (r.ok) { setRenderUrl(p); return; }
-        } catch {}
-      }
-      if (live) setRenderUrl(''); // hide if still not found
-    })();
+  return () => { live = false; };
+}, [character]);
 
-    return () => { live = false; };
-  }, [character]);
+// near other useEffects in Moves.jsx
+useEffect(() => {
+  if (!character) {
+    document.body.removeAttribute("data-char");
+    return;
+  }
+  const slug = slugify(character.slug || character.name || "");
+  document.body.setAttribute("data-char", slug);
+  return () => document.body.removeAttribute("data-char");
+}, [character]);
 
   // ----- misc ui -----
   const toggleToken = (t) => {
