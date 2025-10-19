@@ -704,3 +704,137 @@ body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
   overflow:hidden;
   text-overflow:ellipsis;
 }
+
+/* ===========================
+   COMBO MAKER
+   =========================== */
+.cm-wrap { padding: 24px 0 80px; }
+
+.cm-title{
+  font: 700 clamp(26px,3vw,40px)/1 var(--fp-head);
+  letter-spacing: .04em;
+  margin: 0 0 14px;
+  text-shadow: 0 4px 16px rgba(0,0,0,.55);
+}
+
+.cm-toolbar{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0 14px;
+}
+
+.cm-search{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  padding: 8px 8px 8px 10px;
+  border-radius: 12px;
+}
+
+.cm-input{
+  all: unset;
+  width: min(520px, 70vw);
+  font: 600 14px/1 var(--fp-sans);
+  color: #fff;
+}
+
+.cm-actions{ display: flex; align-items: center; gap: 8px; }
+
+/* Buttons: match mv-btn aesthetic */
+.cm-btn{
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  font: 700 14px/1 var(--fp-sans);
+  cursor: pointer;
+  transition: transform .06s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.cm-btn:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,64,112,.45);
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+}
+.cm-btn:active{
+  transform: translateY(0) scale(.98);
+  box-shadow: 0 4px 14px rgba(0,0,0,.35) inset;
+}
+.cm-btn.ghost{
+  background: transparent;
+  border-color: rgba(255,255,255,.14);
+}
+.cm-btn.ghost:hover{
+  background: rgba(255,64,112,.10);
+  border-color: rgba(255,64,112,.45);
+}
+.cm-btn.primary{
+  background: linear-gradient(135deg,#ff2d7a,#9333ea);
+  border: 0;
+}
+
+/* Icon chips */
+.cm-icons{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 16px;
+}
+.cm-chip{
+  background: #15151c;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: transform .06s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.cm-chip:hover{
+  transform: translateY(-1px);
+  background: rgba(255,64,112,.08);
+  border-color: rgba(255,64,112,.35);
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+}
+.cm-chip .cm-chip-inner{
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cm-chip small{
+  opacity: .75; font: 600 12px/1 var(--fp-sans);
+}
+
+/* Canvas (export area) */
+.cm-canvas{
+  border-radius: 12px;
+  background: #fff;                /* white so your PNG has a white bg */
+  padding: 16px;
+  min-height: 96px;
+  width: min(960px, 94vw);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  border: 1px solid rgba(255,255,255,.10);
+}
+
+.cm-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cm-empty{
+  color: #9aa0a6;
+  font: 600 14px/1 var(--fp-sans);
+}
+
+.cm-fallback{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 14px;
+}
+
+/* Make small screens comfy */
+@media (max-width: 760px){
+  .cm-input { width: 56vw; }
+}
