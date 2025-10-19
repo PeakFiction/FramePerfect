@@ -641,7 +641,7 @@ body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
 .mv-sheet{ overflow: visible; }
 
 
-/* Column widths (header and body sync) */
+/* Column widths (sync with <colgroup>) */
 .mv-sheet .mv-table th:nth-child(1),
 .mv-sheet .mv-table td:nth-child(1){ width:28%; }
 
@@ -658,13 +658,27 @@ body.mv-compact .mv-table td{ padding:10px; font-size:13px; }
 .mv-sheet .mv-table td:nth-child(5){ width:9%; }
 
 .mv-sheet .mv-table th:nth-child(6),
-.mv-sheet .mv-table td:nth-child(6){ width:18%; }
+.mv-sheet .mv-table td:nth-child(6){ width:22%; }  /* PROPERTIES */
 
 .mv-sheet .mv-table th:nth-child(7),
-.mv-sheet .mv-table td:nth-child(7){ width:14%; }
+.mv-sheet .mv-table td:nth-child(7){ width:10%; }  /* NOTES */
 
 .mv-sheet .mv-table th:nth-child(8),
-.mv-sheet .mv-table td:nth-child(8){ width:4%; }
+.mv-sheet .mv-table td:nth-child(8){ width:14%; }  /* ACTIONS */
+
+.mv-toast{
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  z-index: 120;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(14,14,18,.92);
+  color: #fff;
+  font: 700 13px/1 var(--fp-sans, ui-sans-serif, system-ui);
+  box-shadow: 0 10px 28px rgba(0,0,0,.45);
+}
 
 /* --- hard reset: keep rows as real table rows so columns align --- */
 .mv-table{ display:table; width:100%; table-layout:fixed; }

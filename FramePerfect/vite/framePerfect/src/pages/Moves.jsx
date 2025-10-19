@@ -2,21 +2,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useExportData, usePrefs, useCharacter, slugify } from "../lib/data";
 
-// ---------- local playlist store (already used by Playlist.jsx) ----------
-const readLS = (k, f) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? f; } catch { return f; } };
-const writeLS = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-const PL_KEY = "fp_playlist";
-function usePlaylist() {
-  const [list, setList] = useState(() => readLS(PL_KEY, []));
-  useEffect(() => writeLS(PL_KEY, list), [list]);
-  const add = (entry) => {
-    const key = `${entry.charKey}:${entry.id}`;
-    if (list.some(x => x.key === key)) return "exists";
-    setList(prev => [...prev, { ...entry, key, ts: Date.now() }]);
-    return "added";
-  };
-  const remove = (key) => setList(cur => cur.filter(x => x.key !== key));
-  return { list, add, remove };
+import {
+  getPlaylists as plGet,
+  createPlaylist as plCreate,
+  addItem as plAdd,
+  getLastPlaylist as plGetLast,
+  setLastPlaylist as plSetLast,
+} from "../lib/playlist";
+
+function ensurePlaylistId() {
+  // Prefer last used playlist → first playlist → create one
+  let id = plGetLast() || (plGet()[0]?.id);
+  if (!id) {
+    id = plCreate("My Playlist");
+  }
+  plSetLast(id);
+  return id;
 }
 
 // ---------- helpers ----------
@@ -49,6 +50,13 @@ const RENDER_OVERRIDES = {
 
 export default function Moves() {
   const data = useExportData();
+  // toast (inside the component)
+  const [toastMsg, setToastMsg] = useState("");
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(""), 1400);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
 
   // character from ?char=…
   const qs = new URLSearchParams(window.location.search);
@@ -57,7 +65,6 @@ export default function Moves() {
   const charKey = character ? slugify(character.key || character.slug || character.name) : null;
 
   const { isFavorite, toggleFavorite, getNote, setNote } = usePrefs();
-  const { add: addToPlaylist } = usePlaylist();
 
   // ----- moves of this character -----
   const sourceMoves = useMemo(() => {
@@ -291,14 +298,25 @@ useEffect(() => {
 
             <tbody>
               {rows.map((m) => {
-                const id = String(m.moveID || `${m.notation}-${m.startupFrames}-${m.framesOnBlock}`);
+              const id =
+                m.moveID ??
+                slugify(
+                  `${m.notation || ""}|${m.moveName || ""}|${m.startupFrames || ""}|${m.framesOnBlock || ""}|${m.framesOnHit || ""}|${m.framesOnCounter || ""}`
+                );                
                 const note = getNote(id);
                 const blockN = parseFrame(m.framesOnBlock);
                 const hitN = parseFrame(m.framesOnHit);
                 const chN = parseFrame(m.framesOnCounter);
 
                 const handleAddToPlaylist = () => {
-                  addToPlaylist({
+                  if (!charKey) {
+                    setToastMsg("No character selected");
+                    return;
+                  }
+
+                  const pid = ensurePlaylistId();
+
+                  const entry = {
                     id,
                     charKey,
                     character: character?.name || "",
@@ -310,7 +328,16 @@ useEffect(() => {
                     onCH: String(m.framesOnCounter ?? ""),
                     properties: m.stringProperties || m.throwBreak || "",
                     notes: m.notes || "",
-                  });
+                  };
+
+                  const { status } = plAdd(pid, entry);
+                  setToastMsg(
+                    status === "added"
+                      ? "Added to playlist"
+                      : status === "exists"
+                      ? "Already in that playlist"
+                      : "Could not add"
+                  );
                 };
 
                 return (
@@ -320,9 +347,6 @@ useEffect(() => {
                         <div className="cmd-wrap">
                           <strong>{m.notation || "-"}</strong>
                           {m.moveName ? <span className="muted">{m.moveName}</span> : null}
-                          {m.stringProperties || m.throwBreak ? (
-                            <div className="mini-props">{m.stringProperties || m.throwBreak}</div>
-                          ) : null}
                         </div>
                       </td>
                       <td className={clsFrame(parseStartup(m.startupFrames))}>{m.startupFrames || ""}</td>
@@ -334,13 +358,20 @@ useEffect(() => {
                       <td className="acts">
                         <div className="acts-wrap">
                           <button
+                            type="button"
                             className="mv-btn ghost"
                             title={isFavorite(id) ? "Unfavorite" : "Favorite"}
                             onClick={() => toggleFavorite(id)}
                           >
                             {isFavorite(id) ? "★" : "☆"}
                           </button>
-                          <button className="mv-btn" title="Add to playlist" onClick={handleAddToPlaylist}>
+
+                          <button
+                            type="button"
+                            className="mv-btn"
+                            title="Add to playlist"
+                            onClick={handleAddToPlaylist}
+                          >
                             Add to playlist
                           </button>
                         </div>
@@ -370,6 +401,12 @@ useEffect(() => {
           </table>
         </div>
       </section>
+
+        {toastMsg ? (
+      <div className="mv-toast" role="status" aria-live="polite">
+        {toastMsg}
+      </div>
+    ) : null}
     </>
   );
 }
