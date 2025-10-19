@@ -1,255 +1,415 @@
 // src/pages/Moves.jsx
-import { useExportData } from '../data/useData.js';
-import { useSearchParams } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
+import { useExportData, usePrefs, useCharacter, slugify } from "../lib/data";
 
-const norm = (v) => (v ?? '').toString().trim().toLowerCase();
+import {
+  getPlaylists as plGet,
+  createPlaylist as plCreate,
+  addItem as plAdd,
+  getLastPlaylist as plGetLast,
+  setLastPlaylist as plSetLast,
+} from "../lib/playlist";
 
-const keyOf = (m) => String(m?.no ?? m?.moveID);
-
-function parseParamP(p) {
-  if (!p) return new Set();
-  return new Set(
-    p
-      .split(/[.,-]/) 
-      .map((s) => parseInt(s, 10))
-      .filter((n) => Number.isFinite(n))
-  );
-}
-function stringifyP(set) {
-  return Array.from(set).sort((a, b) => a - b).join(',');
-}
-
-export default function MovesPage() {
-  const data = useExportData();
-  const [params, setParams] = useSearchParams();
-
-  const charParam = params.get('char') || '';
-  const cid = useMemo(() => {
-    if (!data || !charParam) return '';
-    const k = norm(charParam);
-    const c =
-      (data.characters || []).find((x) => norm(x.slug) === k) ||
-      (data.characters || []).find((x) => norm(x.name) === k) ||
-      null;
-    return c ? norm(c.slug || c.characterID) : '';
-  }, [data, charParam]);
-
-  const [favs, setFavs] = useState(
-    () => new Set(JSON.parse(localStorage.getItem('fp_favorites') || '[]'))
-  );
-  const isFavorite = (id) => favs.has(String(id));
-  const toggleFavorite = (id) => {
-    const next = new Set(favs);
-    const key = String(id);
-    next.has(key) ? next.delete(key) : next.add(key);
-    setFavs(next);
-    localStorage.setItem('fp_favorites', JSON.stringify([...next]));
-  };
-
-  const [notes, setNotes] = useState(
-    () => JSON.parse(localStorage.getItem('fp_notes') || '{}')
-  );
-  const getNote = (id) => notes[id] || '';
-  const setNote = (id, text) => {
-    const next = { ...notes };
-    if (!text) delete next[id]; else next[id] = text;
-    setNotes(next);
-    localStorage.setItem('fp_notes', JSON.stringify(next));
-  };
-
-  const [playlist, setPlaylist] = useState(() => parseParamP(params.get('p') || ''));
-  const inPlaylist = (k) => playlist.has(Number(k));
-  const toggleInPlaylist = (k) =>
-    setPlaylist((prev) => {
-      const nx = new Set(prev);
-      const n = Number(k);
-      nx.has(n) ? nx.delete(n) : nx.add(n);
-      return nx;
-    });
-  const clearPlaylist = () => setPlaylist(new Set());
-
-  useEffect(() => {
-    const next = new URLSearchParams(params);
-    const str = stringifyP(playlist);
-    if (str) next.set('p', str);
-    else next.delete('p');
-    setParams(next, { replace: true });
-  }, [playlist]);
-
-  const moves = useMemo(() => {
-    if (!data || !cid) return [];
-    const list = (data.moves || []).filter((m) => norm(m.characterID) === cid);
-    list.sort(
-      (a, b) =>
-        (a.no ?? 999999) - (b.no ?? 999999) ||
-        (String(a.moveID) > String(b.moveID) ? 1 : -1)
-    );
-    return list;
-  }, [data, cid]);
-
-  const shareUrl = useMemo(() => {
-    const url = new URL('/playlist', window.location.origin);
-    if (charParam) url.searchParams.set('char', charParam);
-    const str = stringifyP(playlist);
-    if (str) url.searchParams.set('p', str);
-    return url.toString();
-  }, [playlist, charParam]);
-
-  const openView = () => { window.location.href = shareUrl; };
-
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrSrc, setQrSrc] = useState('');
-  async function openQR() {
-    try {
-      const QR = await import('qrcode'); // optional: npm i qrcode
-      const dataUrl = await QR.toDataURL(shareUrl, { margin: 1, scale: 6 });
-      setQrSrc(dataUrl);
-    } catch {
-      setQrSrc(
-        `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(
-          shareUrl
-        )}`
-      );
-    }
-    setQrOpen(true);
+function ensurePlaylistId() {
+  // Prefer last used playlist → first playlist → create one
+  let id = plGetLast() || (plGet()[0]?.id);
+  if (!id) {
+    id = plCreate("My Playlist");
   }
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      alert('Link copied!');
-    } catch {
-      alert('Copy failed — copy manually:\n' + shareUrl);
+  plSetLast(id);
+  return id;
+}
+
+// ---------- helpers ----------
+const parseStartup = (s) => {
+  const m = String(s ?? "").match(/i?(\d+)/i);
+  return m ? parseInt(m[1], 10) : Number.POSITIVE_INFINITY;
+};
+const parseFrame = (s) => {
+  const m = String(s ?? "").match(/[-+]?(\d+)/);
+  return m ? parseInt(m[0], 10) : 0;
+};
+const clsFrame = (n) => (n > 0 ? "pos" : n < 0 ? "neg" : "muted");
+const useDebounced = (v, ms = 180) => {
+  const [val, setVal] = useState(v);
+  useEffect(() => { const t = setTimeout(() => setVal(v), ms); return () => clearTimeout(t); }, [v, ms]);
+  return val;
+};
+
+// A few filename exceptions where the render file doesn’t strictly match the slug
+const RENDER_OVERRIDES = {
+  "armor-king": "armorking_render_transparent",
+  "devil-jin": "deviljin_render_transparent",
+  "jack-8": "jack8_render_transparent",
+  "lee": "lee_render_transparent",
+  "lidia": "lidia_render_transparent",
+  "hwoarang": "hwoarang_render_transparent",
+  "heihachi": "heihachi_render_transparent",
+  "fahkumram": "fahkumram_render_transparent",
+};
+
+export default function Moves() {
+  const data = useExportData();
+  // toast (inside the component)
+  const [toastMsg, setToastMsg] = useState("");
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = setTimeout(() => setToastMsg(""), 1400);
+    return () => clearTimeout(t);
+  }, [toastMsg]);
+
+  // character from ?char=…
+  const qs = new URLSearchParams(window.location.search);
+  const queryChar = qs.get("char") || "";
+  const character = useCharacter(data, queryChar);
+  const charKey = character ? slugify(character.key || character.slug || character.name) : null;
+
+  const { isFavorite, toggleFavorite, getNote, setNote } = usePrefs();
+
+  // ----- moves of this character -----
+  const sourceMoves = useMemo(() => {
+    if (!data || !charKey) return [];
+    return (data.moves || []).filter(m => slugify(m.charKey || m.characterID) === charKey);
+  }, [data, charKey]);
+
+  // ----- toolbar state -----
+  const [q, setQ] = useState("");
+  const qd = useDebounced(q, 200);
+  const [sort, setSort] = useState("az");
+  const [compact, setCompact] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedTokens, setSelectedTokens] = useState(new Set());
+
+  // ----- tokens from PROPERTIES + NOTES -----
+  const tokens = useMemo(() => {
+    const bag = new Set();
+    for (const m of sourceMoves) {
+      const text = [m.stringProperties, m.notes, m.throwBreak].filter(Boolean).join(" ");
+      text.split(/[,*()\/\[\]\s]+/)
+        .map(x => x.trim())
+        .filter(Boolean)
+        .forEach(t => bag.add(t));
     }
+    return Array.from(bag).filter(t => t.length >= 2).slice(0, 100).sort((a, b) => a.localeCompare(b));
+  }, [sourceMoves]);
+
+  // ----- filter + sort -----
+  const rows = useMemo(() => {
+    const qLower = qd.trim().toLowerCase();
+    let out = sourceMoves.filter(m => {
+      if (qLower) {
+        const hay = [
+          m.moveName, m.notation, m.stringProperties, m.notes, m.throwBreak,
+          m.startupFrames, m.framesOnBlock, m.framesOnHit, m.framesOnCounter
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(qLower)) return false;
+      }
+      if (selectedTokens.size) {
+        const hay = ((m.stringProperties || "") + " " + (m.notes || "") + " " + (m.throwBreak || "")).toLowerCase();
+        for (const tok of selectedTokens) if (!hay.includes(String(tok).toLowerCase())) return false;
+      }
+      return true;
+    });
+
+    out.sort((a, b) => {
+      if (sort === "startup") return parseStartup(a.startupFrames) - parseStartup(b.startupFrames);
+      if (sort === "on-block") return parseFrame(b.framesOnBlock) - parseFrame(a.framesOnBlock);
+      if (sort === "on-hit")   return parseFrame(b.framesOnHit) - parseFrame(a.framesOnHit);
+      if (sort === "on-ch")    return parseFrame(b.framesOnCounter) - parseFrame(a.framesOnCounter);
+      const ka = String(a.notation || a.moveName || "").toLowerCase();
+      const kb = String(b.notation || b.moveName || "").toLowerCase();
+      return ka.localeCompare(kb, undefined, { sensitivity: "base" });
+    });
+
+    return out;
+  }, [sourceMoves, qd, selectedTokens, sort]);
+
+// ----- choose render from /public/characterRenders -----
+const [renderUrl, setRenderUrl] = useState("");
+
+useEffect(() => {
+  let live = true;
+  if (!character) { setRenderUrl(""); return; }
+
+  const slug = slugify(character.slug || character.name || "");
+  // only use an alias when the actual file name differs from the slug
+  const RENDER_ALIAS = {
+    "devil-jin": "deviljin",
+    "armor-king": "armorking",
+    "jack-8": "jack8",
+    "lee": "lee",
+    "lidia": "lidia",
+    "hwoarang": "hwoarang",
+    "heihachi": "heihachi",
+    "fahkumram": "fahkumram",
   };
+  const base = RENDER_ALIAS[slug] || slug;
 
-  if (!data) return null;
+  // Try WEBP first, then PNG
+  const candidates = [
+    `/characterRenders/${base}_render_transparent.webp`,
+    `/characterRenders/${base}_render_transparent.png`,
+    `/characterRenders/${base}.webp`,
+    `/characterRenders/${base}.png`,
+  ];
 
+  const tryLoad = (url) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(url);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+
+  (async () => {
+    for (const url of candidates) {
+      const ok = await tryLoad(url);
+      if (!live) return;
+      if (ok) { setRenderUrl(ok); return; }
+    }
+    setRenderUrl(""); // hide if nothing found
+  })();
+
+  return () => { live = false; };
+}, [character]);
+
+// near other useEffects in Moves.jsx
+useEffect(() => {
+  if (!character) {
+    document.body.removeAttribute("data-char");
+    return;
+  }
+  const slug = slugify(character.slug || character.name || "");
+  document.body.setAttribute("data-char", slug);
+  return () => document.body.removeAttribute("data-char");
+}, [character]);
+
+  // ----- misc ui -----
+  const toggleToken = (t) => {
+    const next = new Set(selectedTokens);
+    next.has(t) ? next.delete(t) : next.add(t);
+    setSelectedTokens(next);
+  };
+  const resetTokens = () => setSelectedTokens(new Set());
+  useEffect(() => {
+    document.body.classList.toggle("mv-compact", compact);
+    return () => document.body.classList.remove("mv-compact");
+  }, [compact]);
+
+  // ----- render -----
   return (
-    <div className="page">
-      <h1>{charParam || 'Moves'}</h1>
+    <>
+      {/* centered character render behind */}
+      {renderUrl ? (
+        <img className="mv-render" src={renderUrl} alt="" aria-hidden="true" />
+      ) : null}
 
-      {playlist.size > 0 && (
-        <div style={barStyle}>
-          <div>
-            <strong>Playlist ({playlist.size})</strong>
-            <span style={{ marginLeft: 8, opacity: 0.7 }}>
-              {Array.from(playlist).sort((a,b)=>a-b).slice(0, 6).join(' • ')}
-              {playlist.size > 6 ? ' …' : ''}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="border rounded px-3 py-1" onClick={openView}>Open view</button>
-            <button className="border rounded px-3 py-1" onClick={copyLink}>Copy link</button>
-            <button className="border rounded px-3 py-1" onClick={openQR}>Show QR</button>
-            <button className="border rounded px-3 py-1" onClick={clearPlaylist}>Clear</button>
+      {/* Toolbar */}
+      <section className="mv-toolbar container">
+        <div className="mv-left">
+          <button className="mv-back" onClick={() => window.history.back()} title="Back">←</button>
+          <div className="mv-title">
+            <h1 className="mv-h1">{character?.name || "Moves"}</h1>
+            <span className="mv-sub">Move Database</span>
           </div>
         </div>
-      )}
 
-      <ul className="list">
-        {moves.map((m) => {
-          const id = String(m.moveID);
-          const k = keyOf(m);               
-          const label = m.moveName || m.notation || `Move ${id}`;
-          const meta = {
-            Notation: m.notation,
-            Startup: m.startupFrames,
-            'On Hit': m.framesOnHit,
-            'On Block': m.framesOnBlock,
-            'On CH': m.framesOnCounter,
-            Properties: m.stringProperties,
-            Damage: m.damage,
-          };
-          return (
-            <li key={id} className="item">
-              <div className="row">
-                <div className="col">
-                  <div className="title">{label}</div>
-                  <div className="meta">
-                    {Object.entries(meta).map(([k, v]) =>
-                      v ? (
-                        <span key={k} className="pill">
-                          <strong>{k}:</strong> {v}
-                        </span>
-                      ) : null
-                    )}
-                  </div>
-                  {m.notes && <div className="notes">{m.notes}</div>}
-                </div>
+        <div className="mv-controls">
+          <div className="mv-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18a8 8 0 1 1 5.29-14.03l5.37 5.37-1.41 1.41-4.9-4.9A6 6 0 1 0 10 18z"/></svg>
+            <input
+              id="mvSearch"
+              type="search"
+              placeholder='Search moves like "df2" or "electric"'
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoComplete="off"
+            />
+            {q ? <button id="mvClear" className="mv-btn ghost" onClick={() => setQ("")}>Clear</button> : null}
+          </div>
 
-                <div className="col-right" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    className="fav"
-                    title={isFavorite(id) ? 'Remove favorite' : 'Add favorite'}
-                    onClick={() => toggleFavorite(id)}
-                    style={{ fontSize: 20 }}
-                  >
-                    {isFavorite(id) ? '★' : '☆'}
-                  </button>
+          <select id="mvSort" className="mv-select" value={sort} onChange={(e) => setSort(e.target.value)} title="Sort">
+            <option value="az">A → Z</option>
+            <option value="startup">Startup</option>
+            <option value="on-block">On Block</option>
+            <option value="on-hit">On Hit</option>
+            <option value="on-ch">On CH</option>
+          </select>
 
-                  <button
-                    className="border rounded px-3 py-1"
-                    onClick={() => toggleInPlaylist(k)}
-                    title={inPlaylist(k) ? 'Remove from playlist' : 'Add to playlist'}
-                  >
-                    {inPlaylist(k) ? '✓ In playlist' : '+ Add to playlist'}
-                  </button>
-                </div>
+          <button id="mvFiltersBtn" className="mv-btn" onClick={() => setFiltersOpen(v => !v)}>Apply Filters</button>
+          <button id="mvView" className="mv-btn" onClick={() => setCompact(v => !v)}>{compact ? "Card" : "Compact"}</button>
+
+          {filtersOpen && (
+            <div id="mvFilters" className="mv-popover" role="dialog" aria-label="Filters">
+              <div className="mv-pophead">
+                <strong>Filters</strong>
+                <button id="mvFiltersReset" className="mv-link" onClick={resetTokens}>Reset</button>
               </div>
-
-              <textarea
-                placeholder="Add note…"
-                defaultValue={getNote(id)}
-                onBlur={(e) => setNote(id, e.target.value)}
-              />
-            </li>
-          );
-        })}
-      </ul>
-
-      {qrOpen && (
-        <div style={modalWrap} onClick={() => setQrOpen(false)}>
-          <div style={modalBox} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Scan Playlist</h3>
-            {qrSrc ? <img src={qrSrc} alt="QR" /> : <div>Generating…</div>}
-            <p style={{ fontSize: 12, opacity: 0.7, wordBreak: 'break-all' }}>{shareUrl}</p>
-            <button className="border rounded px-3 py-1" onClick={() => setQrOpen(false)}>Close</button>
-          </div>
+              <div id="mvFilterChips" className="mv-chips">
+                {tokens.map((t) => {
+                  const checked = selectedTokens.has(t);
+                  return (
+                    <label key={t} className="mv-chip">
+                      <input type="checkbox" checked={checked} onChange={() => toggleToken(t)} />
+                      <span>{t}</span>
+                    </label>
+                  );
+                })}
+                {!tokens.length && <span className="muted">No discoverable tokens.</span>}
+              </div>
+              <div className="mv-popfoot">
+                <button id="mvFiltersClose" className="mv-btn ghost" onClick={() => setFiltersOpen(false)}>Close</button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </section>
+
+      {/* Glass panel + REAL table so header and rows share the same columns */}
+      <section className="mv-shell">
+        <div className="mv-glass">
+          <table id="movesTable" className="mv-table">
+            {/* One source of truth for column widths */}
+            <colgroup>
+              <col style={{width: "28%"}} />  {/* command (notation + name) */}
+              <col style={{width: "9%"}} />   {/* startup */}
+              <col style={{width: "9%"}} />   {/* on block */}
+              <col style={{width: "9%"}} />   {/* on hit */}
+              <col style={{width: "9%"}} />   {/* on CH */}
+              <col style={{width: "22%"}} />  {/* properties */}
+              <col style={{width: "10%"}} />  {/* notes */}
+              <col style={{width: "14%"}} />  {/* actions */}
+            </colgroup>
+
+            
+
+            <thead>
+              <tr>
+                <th>COMMAND</th>
+                <th>STARTUP</th>
+                <th>ON BLOCK</th>
+                <th>ON HIT</th>
+                <th>ON CH</th>
+                <th>PROPERTIES</th>
+                <th>NOTES</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((m) => {
+              const id =
+                m.moveID ??
+                slugify(
+                  `${m.notation || ""}|${m.moveName || ""}|${m.startupFrames || ""}|${m.framesOnBlock || ""}|${m.framesOnHit || ""}|${m.framesOnCounter || ""}`
+                );                
+                const note = getNote(id);
+                const blockN = parseFrame(m.framesOnBlock);
+                const hitN = parseFrame(m.framesOnHit);
+                const chN = parseFrame(m.framesOnCounter);
+
+                const handleAddToPlaylist = () => {
+                  if (!charKey) {
+                    setToastMsg("No character selected");
+                    return;
+                  }
+
+                  const pid = ensurePlaylistId();
+
+                  const entry = {
+                    id,
+                    charKey,
+                    character: character?.name || "",
+                    notation: m.notation || "",
+                    moveName: m.moveName || "",
+                    startup: String(m.startupFrames ?? ""),
+                    onBlock: String(m.framesOnBlock ?? ""),
+                    onHit: String(m.framesOnHit ?? ""),
+                    onCH: String(m.framesOnCounter ?? ""),
+                    properties: m.stringProperties || m.throwBreak || "",
+                    notes: m.notes || "",
+                  };
+
+                  const { status } = plAdd(pid, entry);
+                  setToastMsg(
+                    status === "added"
+                      ? "Added to playlist"
+                      : status === "exists"
+                      ? "Already in that playlist"
+                      : "Could not add"
+                  );
+                };
+
+                return (
+                  <Fragment key={id}>
+                    <tr className="mv-row">
+                      <td className="cmd">
+                        <div className="cmd-wrap">
+                          <strong>{m.notation || "-"}</strong>
+                          {m.moveName ? <span className="muted">{m.moveName}</span> : null}
+                        </div>
+                      </td>
+                      <td className={clsFrame(parseStartup(m.startupFrames))}>{m.startupFrames || ""}</td>
+                      <td className={clsFrame(blockN)}>{m.framesOnBlock ?? ""}</td>
+                      <td className={clsFrame(hitN)}>{m.framesOnHit ?? ""}</td>
+                      <td className={clsFrame(chN)}>{m.framesOnCounter ?? ""}</td>
+                      <td className="props">{m.stringProperties || m.throwBreak || ""}</td>
+                      <td className="notes">{m.notes || ""}</td>
+                      <td className="acts">
+                        <div className="acts-wrap">
+                          <button
+                            type="button"
+                            className="mv-btn ghost"
+                            title={isFavorite(id) ? "Unfavorite" : "Favorite"}
+                            onClick={() => toggleFavorite(id)}
+                          >
+                            {isFavorite(id) ? "★" : "☆"}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="mv-btn"
+                            title="Add to playlist"
+                            onClick={handleAddToPlaylist}
+                          >
+                            Add to playlist
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <tr className="mv-note">
+                      <td colSpan={8}>
+                        <textarea
+                          className="mv-note-box"
+                          placeholder="Your note…"
+                          value={note}
+                          onChange={(e) => setNote(id, e.target.value)}
+                        />
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
+
+              {!rows.length && (
+                <tr>
+                  <td colSpan={8} className="muted">No results.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+        {toastMsg ? (
+      <div className="mv-toast" role="status" aria-live="polite">
+        {toastMsg}
+      </div>
+    ) : null}
+    </>
   );
 }
 
-/* inline styles kecil biar gak nyentuh CSS lain */
-const barStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 12,
-  padding: '8px 12px',
-  border: '1px solid #e5e7eb',
-  borderRadius: 8,
-  marginBottom: 12,
-  background: '#fff',
-};
-
-const modalWrap = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,.3)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 16,
-  zIndex: 50,
-};
-
-const modalBox = {
-  background: '#fff',
-  padding: 16,
-  borderRadius: 12,
-  width: 320,
-  textAlign: 'center',
-};
+// allow Fragment above without a new import line everywhere
+function Fragment({ children }) { return children; }
