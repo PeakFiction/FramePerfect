@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Help — FramePerfect HUD</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data:;">
+  <link rel="stylesheet" href="help.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="bar">
+      <h1>FramePerfect HUD</h1>
+      <span class="pill ok">Help</span>
+      <button id="helpClose" class="btn-ghost close" title="Close (Esc)">×</button>
+    </header>
+
+    <section>
+      <h2>Overview</h2>
+      <p>The overlay shows your inputs as motion + buttons. It can record to <code>.fpkeys</code> and play them back to a virtual gamepad (ViGEm).</p>
+    </section>
+
+    <section>
+      <h2>Controls</h2>
+      <ul class="kv">
+        <li><b>Toggle overlay</b><span>Ctrl+Shift+O</span></li>
+        <li><b>Start/Stop record</b><span>Ctrl+Shift+R</span></li>
+        <li><b>Save recording</b><span>Ctrl+Shift+S</span></li>
+        <li><b>Import / play</b><span>Ctrl+Shift+I / Ctrl+Shift+P</span></li>
+        <li><b>Toggle injection</b><span>Ctrl+Shift+J</span></li>
+        <li><b>Open/Close Help</b><span>Ctrl+Shift+H • Esc</span></li>
+        <li><b>Quit</b><span>Ctrl+Shift+Q</span></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Recording</h2>
+      <ol>
+        <li>Press <b>Ctrl+Shift+R</b>. The red dot shows recording.</li>
+        <li>Perform inputs on keyboard or XInput-compatible controller.</li>
+        <li>Press <b>Ctrl+Shift+S</b> to save <code>.fpkeys</code>.</li>
+      </ol>
+      <p>Chord window ~40 ms. Buttons render as <code>12</code>, <code>23</code>, <code>123</code>. Diagonals form from U/D + F/B.</p>
+    </section>
+
+    <section>
+      <h2>Playback</h2>
+      <ol>
+        <li><b>Ctrl+Shift+I</b> and select a <code>.fpkeys</code> file.</li>
+        <li>Ensure “Inject ON” (toggle <b>Ctrl+Shift+J</b>).</li>
+        <li>Stop with <b>Ctrl+Shift+P</b>.</li>
+      </ol>
+      <p>Game window must be focused.</p>
+    </section>
+
+    <section>
+      <h2>Files & Mapping</h2>
+      <ul>
+        <li><code>.fpkeys</code> v2: events are <code>{ t, type:'down'|'up', key }</code> where keys are <code>W A S D J K M COMMA B V</code></li>
+        <li>UIJK → <code>1 2 3 4</code>. Motions: <code>u,d,f,b,uf,ub,df,db</code>.</li>
+        <li>Provider shows <code>xinput+keyboard</code> when a pad was recorded.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Troubleshooting</h2>
+      <ul>
+        <li><b>“FpPad exited …”</b> — install ViGEmBus; run app as admin once.</li>
+        <li><b>No pad events</b> — expose controller as XInput (DS4Windows/Steam Input).</li>
+        <li><b>HUD clipped</b> — raise overlay height in <code>ensureOverlay()</code>.</li>
+      </ul>
+    </section>
+
+    <footer class="bar foot">
+      <span class="pill">v2 recorder • chord 40 ms</span>
+    </footer>
+  </div>
+  <script src="help.js"></script>
+</body>
+</html>
